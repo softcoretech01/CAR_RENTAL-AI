@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     DAMAGE_IMAGE_MAX_PX: int = 1024
     DAMAGE_STORAGE_DIR: str = "storage/images"
 
+    # MySQL
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 3306
+    DB_NAME: str = "damageai"
+    DB_USER: str = "damageai"
+    DB_PASS: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 settings = Settings()

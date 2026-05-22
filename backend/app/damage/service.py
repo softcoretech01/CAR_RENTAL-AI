@@ -29,14 +29,14 @@ def _save(raw: bytes, original_name: str) -> tuple[str, Path]:
         dest.write_bytes(raw)
     return filename, dest
 
-def process_upload(upload: UploadFile) -> tuple[dict, str]:
+def process_upload(upload: UploadFile, few_shots: list[dict] | None = None) -> tuple[dict, str]:
     raw = upload.file.read()
     media_type = upload.content_type or "image/jpeg"
     filename, full_path = _save(raw, upload.filename or "image.jpg")
-    result = ai_service.analyse_bytes(full_path.read_bytes(), media_type)
+    result = ai_service.analyse_bytes(full_path.read_bytes(), media_type, few_shots)
     return result, filename
 
-def process_base64(data: str, name: str) -> tuple[dict, str]:
+def process_base64(data: str, name: str, few_shots: list[dict] | None = None) -> tuple[dict, str]:
     import base64, re
     if "," in data:
         header, b64 = data.split(",", 1)
@@ -44,7 +44,7 @@ def process_base64(data: str, name: str) -> tuple[dict, str]:
     else:
         raw = base64.b64decode(data)
     filename, full_path = _save(raw, name)
-    result = ai_service.analyse_bytes(full_path.read_bytes())
+    result = ai_service.analyse_bytes(full_path.read_bytes(), few_shots=few_shots)
     return result, filename
 
 def delete_file(image_path: str) -> None:

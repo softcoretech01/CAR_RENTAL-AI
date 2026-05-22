@@ -20,7 +20,8 @@ def analyse(file: UploadFile = File(...), conn=Depends(db)):
     if file.content_type not in ALLOWED:
         raise HTTPException(415, f"Unsupported type: {file.content_type}")
     try:
-        ai, filename = service.process_upload(file)
+        few_shots = crud.get_few_shot_examples(conn)
+        ai, filename = service.process_upload(file, few_shots)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
@@ -31,12 +32,14 @@ def analyse(file: UploadFile = File(...), conn=Depends(db)):
         severity=ai["severity"], damage_types=ai["damage_types"],
         region_description=ai.get("region_description"),
         explanation=ai.get("explanation"),
-        is_flagged=service.is_flagged(ai["confidence"]), batch_id=None)
+        is_flagged=service.is_flagged(ai["confidence"]), batch_id=None,
+        bounding_boxes=ai.get("bounding_boxes"))
 
 @router.post("/analyse/webcam", response_model=AnalysisOut, status_code=201)
 def analyse_webcam(body: WebcamRequest, conn=Depends(db)):
     try:
-        ai, filename = service.process_base64(body.image_data, body.original_name)
+        few_shots = crud.get_few_shot_examples(conn)
+        ai, filename = service.process_base64(body.image_data, body.original_name, few_shots)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
@@ -47,7 +50,8 @@ def analyse_webcam(body: WebcamRequest, conn=Depends(db)):
         severity=ai["severity"], damage_types=ai["damage_types"],
         region_description=ai.get("region_description"),
         explanation=ai.get("explanation"),
-        is_flagged=service.is_flagged(ai["confidence"]), batch_id=None)
+        is_flagged=service.is_flagged(ai["confidence"]), batch_id=None,
+        bounding_boxes=ai.get("bounding_boxes"))
 
 @router.post("/batch", response_model=BatchOut, status_code=201)
 def create_batch(label: str | None = Query(default=None), conn=Depends(db)):
@@ -60,7 +64,8 @@ def batch_analyse(batch_id: int, file: UploadFile = File(...), conn=Depends(db))
     if file.content_type not in ALLOWED:
         raise HTTPException(415, f"Unsupported type: {file.content_type}")
     try:
-        ai, filename = service.process_upload(file)
+        few_shots = crud.get_few_shot_examples(conn)
+        ai, filename = service.process_upload(file, few_shots)
     except Exception as e:
         raise HTTPException(500, f"Analysis failed: {e}")
     row = crud.create_analysis(conn, image_path=filename,
@@ -69,7 +74,8 @@ def batch_analyse(batch_id: int, file: UploadFile = File(...), conn=Depends(db))
         severity=ai["severity"], damage_types=ai["damage_types"],
         region_description=ai.get("region_description"),
         explanation=ai.get("explanation"),
-        is_flagged=service.is_flagged(ai["confidence"]), batch_id=batch_id)
+        is_flagged=service.is_flagged(ai["confidence"]), batch_id=batch_id,
+        bounding_boxes=ai.get("bounding_boxes"))
     crud.refresh_batch_counts(conn, batch_id)
     return row
 
@@ -110,6 +116,10 @@ def get_batch(bid: int, conn=Depends(db)):
     if not b: raise HTTPException(404, "Not found")
     analyses = crud.list_analyses(conn, batch_id=bid, limit=200)
     return {"batch": b, "analyses": analyses}
+
+@router.get("/stats")
+def stats(conn=Depends(db)):
+    return crud.get_stats(conn)
 
 @router.get("/images/{filename}")
 def image(filename: str):

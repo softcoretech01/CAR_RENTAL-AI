@@ -1,79 +1,142 @@
+"""
+CRUD layer — every database operation is a stored-procedure call.
+No raw SQL exists here; all SQL lives in database.py / MySQL.
+"""
+from __future__ import annotations
 import json
-import sqlite3
+import pymysql.connections
+
 from app.database import row_to_dict
 
-def create_batch(conn: sqlite3.Connection, label: str | None) -> dict:
-    cur = conn.execute(
-        "INSERT INTO damage_batches (label) VALUES (?)", (label,)
-    )
-    row = conn.execute("SELECT * FROM damage_batches WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return row_to_dict(row)
 
-def get_batch(conn: sqlite3.Connection, batch_id: int) -> dict | None:
-    row = conn.execute("SELECT * FROM damage_batches WHERE id = ?", (batch_id,)).fetchone()
+# ─── Internal helper ──────────────────────────────────────────────────────────
+
+def _call_one(conn: pymysql.connections.Connection, sp: str, args: tuple = ()) -> dict | None:
+    """Call a stored procedure and return the first (only) row, or None."""
+    with conn.cursor() as cur:
+        cur.execute(f"CALL {sp}({', '.join(['%s'] * len(args))})", args)
+        row = cur.fetchone()
     return row_to_dict(row) if row else None
 
-def list_batches(conn: sqlite3.Connection, limit: int = 20, offset: int = 0) -> list[dict]:
-    rows = conn.execute(
-        "SELECT * FROM damage_batches ORDER BY created_at DESC LIMIT ? OFFSET ?",
-        (limit, offset)
-    ).fetchall()
+
+def _call_many(conn: pymysql.connections.Connection, sp: str, args: tuple = ()) -> list[dict]:
+    """Call a stored procedure and return all rows."""
+    with conn.cursor() as cur:
+        cur.execute(f"CALL {sp}({', '.join(['%s'] * len(args))})", args)
+        rows = cur.fetchall()
     return [row_to_dict(r) for r in rows]
 
-def refresh_batch_counts(conn: sqlite3.Connection, batch_id: int) -> dict | None:
-    conn.execute("""
-        UPDATE damage_batches SET
-            total_count       = (SELECT COUNT(*) FROM damage_analyses WHERE batch_id = ?),
-            damaged_count     = (SELECT COUNT(*) FROM damage_analyses WHERE batch_id = ? AND status = 'damaged'),
-            not_damaged_count = (SELECT COUNT(*) FROM damage_analyses WHERE batch_id = ? AND status = 'not_damaged'),
-            flagged_count     = (SELECT COUNT(*) FROM damage_analyses WHERE batch_id = ? AND is_flagged = 1)
-        WHERE id = ?
-    """, (batch_id, batch_id, batch_id, batch_id, batch_id))
-    return get_batch(conn, batch_id)
 
-def create_analysis(conn: sqlite3.Connection, *, image_path: str, original_name: str | None,
-                    source: str, status: str, confidence: float, severity: str,
-                    damage_types: list[str], region_description: str | None,
-                    explanation: str | None, is_flagged: bool,
-                    batch_id: int | None) -> dict:
-    cur = conn.execute("""
-        INSERT INTO damage_analyses
-            (image_path, original_name, source, status, confidence, severity,
-             damage_types, region_description, explanation, is_flagged, batch_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    """, (image_path, original_name, source, status, confidence, severity,
-          json.dumps(damage_types), region_description, explanation,
-          1 if is_flagged else 0, batch_id))
-    row = conn.execute("SELECT * FROM damage_analyses WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return row_to_dict(row)
+# ─── Batch operations ─────────────────────────────────────────────────────────
 
-def get_analysis(conn: sqlite3.Connection, analysis_id: int) -> dict | None:
-    row = conn.execute("SELECT * FROM damage_analyses WHERE id = ?", (analysis_id,)).fetchone()
-    return row_to_dict(row) if row else None
+def create_batch(conn, label: str | None) -> dict:
+    return _call_one(conn, "sp_create_batch", (label,))
 
-def list_analyses(conn: sqlite3.Connection, *, status: str | None = None,
-                  severity: str | None = None, is_flagged: bool | None = None,
-                  batch_id: int | None = None, limit: int = 20, offset: int = 0) -> list[dict]:
-    conditions, params = [], []
-    if status: conditions.append("status = ?"); params.append(status)
-    if severity: conditions.append("severity = ?"); params.append(severity)
-    if is_flagged is not None: conditions.append("is_flagged = ?"); params.append(1 if is_flagged else 0)
-    if batch_id is not None: conditions.append("batch_id = ?"); params.append(batch_id)
-    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-    rows = conn.execute(
-        f"SELECT * FROM damage_analyses {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-        params + [limit, offset]
-    ).fetchall()
-    return [row_to_dict(r) for r in rows]
 
-def update_feedback(conn: sqlite3.Connection, analysis_id: int, feedback: str) -> dict | None:
-    conn.execute("UPDATE damage_analyses SET user_feedback = ? WHERE id = ?", (feedback, analysis_id))
-    return get_analysis(conn, analysis_id)
+def get_batch(conn, batch_id: int) -> dict | None:
+    return _call_one(conn, "sp_get_batch", (batch_id,))
 
-def delete_analysis(conn: sqlite3.Connection, analysis_id: int) -> tuple[int, str | None]:
-    row = conn.execute("SELECT image_path FROM damage_analyses WHERE id = ?", (analysis_id,)).fetchone()
-    if not row:
+
+def list_batches(conn, limit: int = 20, offset: int = 0) -> list[dict]:
+    return _call_many(conn, "sp_list_batches", (limit, offset))
+
+
+def refresh_batch_counts(conn, batch_id: int) -> dict | None:
+    return _call_one(conn, "sp_refresh_batch_counts", (batch_id,))
+
+
+# ─── Analysis operations ──────────────────────────────────────────────────────
+
+def create_analysis(
+    conn, *,
+    image_path: str,
+    original_name: str | None,
+    source: str,
+    status: str,
+    confidence: float,
+    severity: str,
+    damage_types: list[str],
+    region_description: str | None,
+    explanation: str | None,
+    is_flagged: bool,
+    batch_id: int | None,
+    bounding_boxes: list[list[float]] | None = None,
+) -> dict:
+    return _call_one(conn, "sp_create_analysis", (
+        image_path,
+        original_name,
+        source,
+        status,
+        confidence,
+        severity,
+        json.dumps(damage_types),
+        region_description,
+        explanation,
+        1 if is_flagged else 0,
+        batch_id,
+        json.dumps(bounding_boxes or []),
+    ))
+
+
+def get_analysis(conn, analysis_id: int) -> dict | None:
+    return _call_one(conn, "sp_get_analysis", (analysis_id,))
+
+
+def list_analyses(
+    conn, *,
+    status: str | None = None,
+    severity: str | None = None,
+    is_flagged: bool | None = None,
+    batch_id: int | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[dict]:
+    # Convert Python None/bool to MySQL-friendly values
+    flagged_val = None if is_flagged is None else (1 if is_flagged else 0)
+    return _call_many(conn, "sp_list_analyses", (
+        status or "",
+        severity or "",
+        flagged_val,
+        batch_id,
+        limit,
+        offset,
+    ))
+
+
+def update_feedback(conn, analysis_id: int, feedback: str) -> dict | None:
+    return _call_one(conn, "sp_update_feedback", (analysis_id, feedback))
+
+
+def delete_analysis(conn, analysis_id: int) -> tuple[int, str | None]:
+    """Returns (rows_deleted, image_path_or_None)."""
+    row = _call_one(conn, "sp_delete_analysis", (analysis_id,))
+    if row is None:
         return 0, None
-    image_path = row["image_path"]
-    conn.execute("DELETE FROM damage_analyses WHERE id = ?", (analysis_id,))
-    return 1, image_path
+    return int(row.get("deleted", 0)), row.get("image_path")
+
+
+# ─── Few-shot examples ────────────────────────────────────────────────────────
+
+def get_few_shot_examples(conn, limit: int = 5) -> list[dict]:
+    return _call_many(conn, "sp_get_few_shot_examples", (limit,))
+
+
+# ─── Dashboard stats ──────────────────────────────────────────────────────────
+
+def get_stats(conn) -> dict:
+    """Aggregate dashboard stats — calls three stored procedures."""
+    summary = _call_one(conn, "sp_get_summary_stats", ())
+    flagged_items  = _call_many(conn, "sp_get_flagged_items",   (5,))
+    incorrect_items = _call_many(conn, "sp_get_incorrect_items", (5,))
+
+    return {
+        "total":           int(summary.get("total", 0)          or 0),
+        "damaged":         int(summary.get("damaged", 0)        or 0),
+        "not_damaged":     int(summary.get("not_damaged", 0)    or 0),
+        "uncertain":       int(summary.get("uncertain", 0)      or 0),
+        "flagged":         int(summary.get("flagged", 0)        or 0),
+        "correct":         int(summary.get("correct_count", 0)  or 0),
+        "incorrect":       int(summary.get("incorrect_count", 0)or 0),
+        "flagged_items":   flagged_items,
+        "incorrect_items": incorrect_items,
+    }

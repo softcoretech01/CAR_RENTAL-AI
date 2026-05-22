@@ -26,6 +26,7 @@ class AnalysisOut(BaseModel):
     is_flagged: bool
     batch_id: Optional[int]
     user_feedback: Optional[str]
+    bounding_boxes: list[list[float]] = []
     created_at: str
     model_config = {"from_attributes": True}
 
