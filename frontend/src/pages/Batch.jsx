@@ -1,22 +1,29 @@
 import { useRef, useState } from 'react';
-import { Layers, Upload, CheckCircle, XCircle, AlertTriangle, Loader2, Download, RefreshCw } from 'lucide-react';
+import { Layers, Upload, CheckCircle2, XCircle, AlertTriangle, Loader2, Download, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { SeverityBadge } from '../components/SeverityBadge';
 
 const IMAGE_BASE = '/api/v1/damage/images/';
-const STATUS_ICON = { damaged:<XCircle className="w-4 h-4 text-red-500"/>, not_damaged:<CheckCircle className="w-4 h-4 text-emerald-500"/>, uncertain:<AlertTriangle className="w-4 h-4 text-amber-500"/> };
+const STATUS_CFG = {
+  damaged:     { icon: XCircle,       color: 'var(--red)'   },
+  not_damaged: { icon: CheckCircle2,  color: 'var(--green)' },
+  uncertain:   { icon: AlertTriangle, color: 'var(--amber)' },
+};
 
 export default function Batch() {
   const ref = useRef(null);
-  const [files, setFiles] = useState([]);
+  const [files, setFiles]       = useState([]);
   const [dragging, setDragging] = useState(false);
-  const [batchId, setBatchId] = useState(null);
-  const [results, setResults] = useState([]);
+  const [batchId, setBatchId]   = useState(null);
+  const [results, setResults]   = useState([]);
   const [processing, setProcessing] = useState(false);
-  const [done, setDone] = useState(false);
-  const [idx, setIdx] = useState(-1);
+  const [done, setDone]         = useState(false);
+  const [idx, setIdx]           = useState(-1);
 
-  function pick(list) { setFiles(Array.from(list).filter(f=>f.type.startsWith('image/')).slice(0,50)); setResults([]); setDone(false); setBatchId(null); }
+  function pick(list) {
+    setFiles(Array.from(list).filter(f => f.type.startsWith('image/')).slice(0, 50));
+    setResults([]); setDone(false); setBatchId(null);
+  }
 
   async function run() {
     if (!files.length) return;
@@ -37,124 +44,212 @@ export default function Batch() {
     finally { setProcessing(false); setIdx(-1); }
   }
 
-  function reset() { setFiles([]); setResults([]); setDone(false); setBatchId(null); setIdx(-1); if(ref.current) ref.current.value=''; }
+  function reset() {
+    setFiles([]); setResults([]); setDone(false); setBatchId(null); setIdx(-1);
+    if (ref.current) ref.current.value = '';
+  }
 
   function exportCSV() {
     const header = ['Filename','Status','Confidence','Severity','Damage Types','Region','Explanation','Flagged'];
-    const rows = results.map(({file,result,error}) => !result
-      ? [file.name,'ERROR','','','','',error,'']
-      : [file.name,result.status,Math.round(result.confidence),result.severity,(result.damage_types||[]).join(';'),result.region_description||'',result.explanation||'',result.is_flagged?'Yes':'No']
+    const rows = results.map(({ file, result, error }) => !result
+      ? [file.name, 'ERROR', '', '', '', '', error, '']
+      : [file.name, result.status, Math.round(result.confidence), result.severity,
+         (result.damage_types || []).join(';'), result.region_description || '', result.explanation || '', result.is_flagged ? 'Yes' : 'No']
     );
-    const csv = [header,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-    a.download = `batch-${batchId||'export'}.csv`; a.click();
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `batch-${batchId || 'export'}.csv`; a.click();
   }
 
-  const damaged = results.filter(r=>r.result?.status==='damaged').length;
-  const notDamaged = results.filter(r=>r.result?.status==='not_damaged').length;
-  const flagged = results.filter(r=>r.result?.is_flagged).length;
+  const damaged    = results.filter(r => r.result?.status === 'damaged').length;
+  const notDamaged = results.filter(r => r.result?.status === 'not_damaged').length;
+  const flagged    = results.filter(r => r.result?.is_flagged).length;
+  const progress   = files.length > 0 ? Math.round((results.length / files.length) * 100) : 0;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Batch Upload</h1>
-        <p className="text-sm text-gray-500 mt-1">Upload up to 50 images — each analysed automatically.</p>
+    <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Batch Analysis</h1>
+          <p className="page-sub">Upload up to 50 images for automated sequential processing.</p>
+        </div>
       </div>
 
+      {/* Drop zone */}
       {!done && (
-        <div onClick={() => !processing && ref.current?.click()}
-          onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
-          onDrop={e=>{e.preventDefault();setDragging(false);pick(e.dataTransfer.files);}}
-          className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all
-            ${dragging?'border-violet-400 bg-violet-50 scale-[1.01]':'border-gray-300 bg-gray-50 hover:border-violet-400 hover:bg-violet-50'}
-            ${processing?'cursor-not-allowed opacity-60':'cursor-pointer'}`}>
-          <input ref={ref} type="file" multiple accept="image/*" className="hidden" onChange={e=>pick(e.target.files)} />
-          <div className="flex flex-col items-center gap-3">
-            <div className="p-4 bg-violet-100 rounded-full"><Layers className="w-8 h-8 text-violet-600" /></div>
-            {files.length > 0
-              ? <><p className="font-semibold text-gray-700">{files.length} image{files.length!==1?'s':''} selected</p><p className="text-sm text-gray-400">Drop more to replace or click Start</p></>
-              : <><p className="font-semibold text-gray-700">Drop images here or click to browse</p><p className="text-sm text-gray-400">Supports JPG, PNG, WebP · Max 50 files</p></>
-            }
-          </div>
-        </div>
-      )}
-
-      {files.length > 0 && !done && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{files.length} files queued</p>
-          <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-            {files.map((f,i)=>(
-              <div key={i} className="flex items-center gap-2 text-sm text-gray-600 py-0.5">
-                {i<results.length ? (results[i].result?STATUS_ICON[results[i].result.status]:<AlertTriangle className="w-4 h-4 text-red-400"/>)
-                  : i===idx ? <Loader2 className="w-4 h-4 text-violet-500 animate-spin"/>
-                  : <Upload className="w-4 h-4 text-gray-300"/>}
-                <span className="truncate">{f.name}</span>
-                <span className="ml-auto text-gray-400 text-xs">{(f.size/1024).toFixed(0)}KB</span>
-              </div>
-            ))}
-          </div>
-          {processing && (
-            <div className="mt-3">
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Processing…</span><span>{results.length}/{files.length}</span></div>
-              <div className="w-full bg-gray-100 rounded-full h-2"><div className="h-2 bg-violet-500 rounded-full transition-all" style={{width:`${(results.length/files.length)*100}%`}}/></div>
+        <div
+          className={`drop-zone ${dragging ? 'dragging' : ''}`}
+          style={{ cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? .6 : 1, minHeight: 180 }}
+          onClick={() => !processing && ref.current?.click()}
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={e => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files); }}
+        >
+          <input ref={ref} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => pick(e.target.files)} />
+          <div className="drop-zone-icon"><Layers size={22} /></div>
+          {files.length > 0 ? (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{files.length} images selected</p>
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4 }}>Click to replace files</p>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Drop images here or click to browse</p>
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4 }}>JPG, PNG, WebP · up to 50 files</p>
             </div>
           )}
         </div>
       )}
 
-      {!done && (
-        <div className="flex gap-3">
-          <button onClick={run} disabled={!files.length||processing}
-            className="flex-1 py-3 bg-violet-600 text-white font-semibold rounded-xl hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-            {processing ? <><Loader2 className="w-4 h-4 animate-spin"/>Processing {results.length+1}/{files.length}…</> : <><Layers className="w-4 h-4"/>Start Batch Analysis</>}
-          </button>
-          {files.length>0 && !processing && <button onClick={reset} className="px-4 py-3 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50"><RefreshCw className="w-4 h-4"/></button>}
+      {/* File queue */}
+      {files.length > 0 && !done && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">{files.length} Files Queued</span>
+            {processing && <span className="badge badge-violet">{results.length}/{files.length} done</span>}
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+              {files.map((f, i) => {
+                const r = results[i];
+                const isCurrent = i === idx;
+                const cfg = r?.result ? STATUS_CFG[r.result.status] : null;
+                const StatusIcon = cfg?.icon;
+                return (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '7px 10px', borderRadius: 7,
+                    background: 'var(--surface2)', border: '1px solid var(--border)',
+                    fontSize: 13,
+                  }}>
+                    <span style={{ width: 16, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                      {isCurrent ? <Loader2 size={13} className="spin" style={{ color: 'var(--violet)' }} />
+                        : StatusIcon ? <StatusIcon size={13} style={{ color: cfg.color }} />
+                        : <Upload size={13} style={{ color: 'var(--text3)' }} />}
+                    </span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', fontWeight: 500 }}>
+                      {f.name}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+                      {(f.size / 1024).toFixed(0)} KB
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {processing && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span className="section-label">Progress</span>
+                  <span style={{ fontFamily: 'var(--mono)', color: 'var(--violet)', fontWeight: 700 }}>{progress}%</span>
+                </div>
+                <div className="conf-track" style={{ height: 6 }}>
+                  <div className="conf-fill" style={{ width: `${progress}%`, background: 'var(--violet)', transition: 'width .3s ease' }} />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
+      {/* Action buttons */}
+      {!done && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-primary btn-lg" style={{ flex: 1, justifyContent: 'center' }}
+            onClick={run} disabled={!files.length || processing}>
+            {processing
+              ? <><Loader2 size={16} className="spin" /> Processing…</>
+              : <><Layers size={16} /> Start Batch Analysis</>}
+          </button>
+          {files.length > 0 && !processing && (
+            <button className="btn btn-ghost btn-lg" onClick={reset}>
+              <RefreshCw size={15} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Results */}
       {results.length > 0 && (
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {done && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[['Total',files.length,'text-gray-700','bg-gray-50 border-gray-200'],['Damaged',damaged,'text-red-700','bg-red-50 border-red-200'],['Not Damaged',notDamaged,'text-emerald-700','bg-emerald-50 border-emerald-200'],['Flagged',flagged,'text-yellow-700','bg-yellow-50 border-yellow-200']].map(([l,v,tc,bg])=>(
-                <div key={l} className={`border rounded-xl p-3.5 text-center ${bg}`}>
-                  <p className={`text-2xl font-bold ${tc}`}>{v}</p><p className="text-xs text-gray-500 mt-1">{l}</p>
+            <div className="grid-4">
+              {[
+                { label: 'Total Scanned', value: files.length, cls: 'violet' },
+                { label: 'Damage Found',  value: damaged,       cls: 'red'    },
+                { label: 'Clear / Safe',  value: notDamaged,    cls: 'green'  },
+                { label: 'Flagged',       value: flagged,        cls: 'amber'  },
+              ].map(({ label, value, cls }) => (
+                <div key={label} className={`stat-card ${cls}`}>
+                  <div className="stat-label">{label}</div>
+                  <div className="stat-value">{value}</div>
                 </div>
               ))}
             </div>
           )}
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-semibold text-gray-700">Results ({results.length})</p>
+
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">Results Grid ({results.length})</span>
               {done && (
-                <div className="flex gap-2">
-                  <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-sm text-gray-600 rounded-xl hover:bg-gray-50"><Download className="w-3.5 h-3.5"/>Export CSV</button>
-                  <button onClick={reset} className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700"><RefreshCw className="w-3.5 h-3.5"/>New Batch</button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={exportCSV}>
+                    <Download size={13} /> CSV
+                  </button>
+                  <button className="btn btn-primary btn-sm" onClick={reset}>
+                    <RefreshCw size={13} /> New Batch
+                  </button>
                 </div>
               )}
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {results.map(({file,result,error},i)=>(
-                <div key={i} className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
-                  {result ? (
-                    <>
-                      <div className="aspect-square overflow-hidden"><img src={`${IMAGE_BASE}${result.image_path}`} alt={file.name} className="w-full h-full object-cover"/></div>
-                      <div className="p-2 space-y-1">
-                        <div className="flex items-center gap-1">{STATUS_ICON[result.status]}<span className="text-xs font-semibold capitalize text-gray-700">{result.status.replace('_',' ')}</span></div>
-                        <SeverityBadge severity={result.severity}/>
-                        <p className="text-xs text-gray-400 truncate">{file.name}</p>
-                        {result.is_flagged && <span className="text-xs text-yellow-700">⚠ Review</span>}
+            <div className="card-body">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+                {results.map(({ file, result, error }, i) => (
+                  <div key={i} style={{
+                    background: 'var(--surface2)', border: '1px solid var(--border)',
+                    borderRadius: 10, overflow: 'hidden',
+                  }}>
+                    {result ? (
+                      <>
+                        <div style={{ aspectRatio: '1', overflow: 'hidden', background: 'var(--surface3)', position: 'relative' }}>
+                          <img src={`${IMAGE_BASE}${result.image_path}`} alt={file.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          {result.is_flagged && (
+                            <span className="badge badge-amber" style={{ position: 'absolute', top: 6, right: 6, fontSize: 9 }}>
+                              Review
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {(() => {
+                            const cfg = STATUS_CFG[result.status] ?? STATUS_CFG.uncertain;
+                            const I = cfg.icon;
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: cfg.color }}>
+                                <I size={12} /> <span style={{ textTransform: 'capitalize' }}>{result.status.replace('_', ' ')}</span>
+                              </div>
+                            );
+                          })()}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 11, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{file.name}</span>
+                            <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text2)', flexShrink: 0 }}>{Math.round(result.confidence)}%</span>
+                          </div>
+                          <SeverityBadge severity={result.severity} />
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ padding: 12 }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', textTransform: 'uppercase', marginBottom: 4 }}>Failed</p>
+                        <p style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                        <p style={{ fontSize: 11, color: 'var(--red)', background: 'var(--red-bg)', borderRadius: 6, padding: '4px 8px' }}>{error}</p>
                       </div>
-                    </>
-                  ) : (
-                    <div className="p-3 space-y-1">
-                      <p className="text-xs font-medium text-red-600">Failed</p>
-                      <p className="text-xs text-gray-400 truncate">{file.name}</p>
-                      <p className="text-xs text-red-400 truncate">{error}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

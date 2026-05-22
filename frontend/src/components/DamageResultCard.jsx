@@ -1,109 +1,196 @@
 import { useState } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw, Clock } from 'lucide-react';
+import {
+  CheckCircle2, XCircle, AlertTriangle,
+  ThumbsUp, ThumbsDown, Clock, ShieldAlert,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { SeverityBadge } from './SeverityBadge';
 import { ConfidenceBar } from './ConfidenceBar';
 
 const IMAGE_BASE = '/api/v1/damage/images/';
 
-const STATUS = {
-  damaged:     { icon: XCircle,      label: 'Damaged',     banner: 'bg-red-50 border-red-200',     text: 'text-red-700',     iconCls: 'text-red-500' },
-  not_damaged: { icon: CheckCircle,  label: 'Not Damaged', banner: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700', iconCls: 'text-emerald-500' },
-  uncertain:   { icon: AlertTriangle,label: 'Uncertain',   banner: 'bg-amber-50 border-amber-200', text: 'text-amber-700',   iconCls: 'text-amber-500' },
+const STATUS_CFG = {
+  damaged:     { icon: XCircle,      label: 'Damage Detected', bannerCls: 'damaged',   color: 'var(--red)'   },
+  not_damaged: { icon: CheckCircle2, label: 'Undamaged — Clear', bannerCls: 'ok',       color: 'var(--green)' },
+  uncertain:   { icon: AlertTriangle,label: 'Uncertain Result', bannerCls: 'uncertain', color: 'var(--amber)' },
 };
 
 export function DamageResultCard({ result, onReset }) {
   const [feedback, setFeedback] = useState(result.user_feedback || null);
-  const [busy, setBusy] = useState(false);
-  const cfg = STATUS[result.status] ?? STATUS.uncertain;
+  const [busy, setBusy]         = useState(false);
+  const cfg = STATUS_CFG[result.status] ?? STATUS_CFG.uncertain;
   const Icon = cfg.icon;
 
   async function submitFeedback(value) {
     if (busy || feedback) return;
     setBusy(true);
-    try { await api.patch(`/damage/analyses/${result.id}/feedback`, { feedback: value }); setFeedback(value); }
-    catch { /* silent */ } finally { setBusy(false); }
+    try {
+      await api.patch(`/damage/analyses/${result.id}/feedback`, { feedback: value });
+      setFeedback(value);
+    } catch (e) { console.error(e); }
+    finally { setBusy(false); }
   }
 
   return (
-    <div className="space-y-5">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
       {/* Status banner */}
-      <div className={`border rounded-xl p-4 flex items-center gap-3 ${cfg.banner}`}>
-        <Icon className={`w-8 h-8 shrink-0 ${cfg.iconCls}`} />
-        <div>
-          <p className={`text-xl font-bold ${cfg.text}`}>{cfg.label}</p>
-          {result.original_name && <p className="text-xs text-gray-500 mt-0.5">{result.original_name}</p>}
+      <div className={`result-banner ${cfg.bannerCls}`}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10, background: 'rgba(0,0,0,.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <Icon size={20} style={{ color: cfg.color }} />
+          </div>
+          <div>
+            <p style={{ fontSize: 16, fontWeight: 700, color: cfg.color }}>{cfg.label}</p>
+            {result.original_name && (
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{result.original_name}</p>
+            )}
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <SeverityBadge severity={result.severity} />
           {result.is_flagged && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-full text-xs font-semibold">
-              <AlertTriangle className="w-3 h-3" /> Review
+            <span className="badge badge-amber">
+              <ShieldAlert size={10} /> Flagged
             </span>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl overflow-hidden border border-gray-200 bg-gray-50 aspect-square flex items-center justify-center">
-          <img src={`${IMAGE_BASE}${result.image_path}`} alt="Analysed" className="w-full h-full object-contain" />
+      {/* Image + metadata */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+        {/* Image with bounding boxes */}
+        <div style={{
+          background: 'var(--surface2)', border: '1px solid var(--border)',
+          borderRadius: 10, overflow: 'hidden',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          minHeight: 200, position: 'relative',
+        }}>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <img src={`${IMAGE_BASE}${result.image_path}`} alt="Analysed"
+              style={{ maxHeight: 300, maxWidth: '100%', display: 'block', objectFit: 'contain' }} />
+            {result.status === 'damaged' && result.bounding_boxes?.map((box, i) => {
+              const [ymin, xmin, ymax, xmax] = box;
+              return (
+                <div key={i} style={{
+                  position: 'absolute', border: '2px solid var(--red)',
+                  background: 'rgba(255,84,84,.12)',
+                  top: `${ymin}%`, left: `${xmin}%`,
+                  height: `${ymax - ymin}%`, width: `${xmax - xmin}%`,
+                  borderRadius: 2,
+                }}>
+                  <span style={{
+                    position: 'absolute', top: -18, left: 0,
+                    background: 'var(--red)', color: '#fff',
+                    fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                    textTransform: 'uppercase', letterSpacing: '.04em',
+                  }}>
+                    #{i + 1}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <div className="space-y-4">
-          <ConfidenceBar confidence={result.confidence} />
-          {result.damage_types?.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Damage Types</p>
-              <div className="flex flex-wrap gap-1.5">
-                {result.damage_types.map(t => (
-                  <span key={t} className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs font-medium capitalize">{t}</span>
-                ))}
+
+        {/* Metadata */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14,
+          }}>
+            <ConfidenceBar confidence={result.confidence} />
+
+            {result.damage_types?.length > 0 && (
+              <div>
+                <p className="section-label" style={{ marginBottom: 8 }}>Identified Types</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {result.damage_types.map(t => (
+                    <span key={t} className="badge badge-red" style={{ textTransform: 'capitalize' }}>{t}</span>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
           {result.region_description && result.region_description !== 'No damage detected' && (
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Location</p>
-              <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-2.5">{result.region_description}</p>
+              <p className="section-label" style={{ marginBottom: 6 }}>Spatial Location</p>
+              <p style={{
+                fontSize: 13, color: 'var(--text2)', lineHeight: 1.65,
+                background: 'var(--surface2)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: '10px 12px',
+              }}>
+                {result.region_description}
+              </p>
             </div>
           )}
+
           {result.explanation && (
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">AI Assessment</p>
-              <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 border border-gray-200 rounded-lg p-2.5">{result.explanation}</p>
+              <p className="section-label" style={{ marginBottom: 6 }}>AI Assessment</p>
+              <p style={{
+                fontSize: 13, color: 'var(--text2)', lineHeight: 1.65,
+                background: 'var(--surface2)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: '10px 12px',
+              }}>
+                {result.explanation}
+              </p>
             </div>
           )}
-          <div className="flex items-center gap-1 text-xs text-gray-400">
-            <Clock className="w-3 h-3" />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text3)' }}>
+            <Clock size={11} />
             {new Date(result.created_at).toLocaleString()}
           </div>
         </div>
       </div>
 
       {result.is_flagged && (
-        <div className="flex items-start gap-2.5 bg-yellow-50 border border-yellow-200 rounded-xl p-3.5 text-sm text-yellow-800">
-          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-yellow-600" />
-          <span><strong>Low confidence.</strong> Please review this image manually before making a decision.</span>
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          background: 'var(--amber-bg)', border: '1px solid rgba(255,170,0,.2)',
+          borderRadius: 10, padding: '12px 14px',
+        }}>
+          <ShieldAlert size={15} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>Low Confidence Warning</p>
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2, lineHeight: 1.5 }}>
+              Score fell below the 65% verification threshold. Human review is recommended.
+            </p>
+          </div>
         </div>
       )}
 
-      <div className="flex items-center gap-3 pt-1">
-        <span className="text-sm text-gray-500">Was this correct?</span>
-        <button onClick={() => submitFeedback('correct')} disabled={!!feedback || busy}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-            ${feedback === 'correct' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-              : 'border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50'}`}>
-          <ThumbsUp className="w-3.5 h-3.5" /> Yes
-        </button>
-        <button onClick={() => submitFeedback('incorrect')} disabled={!!feedback || busy}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-            ${feedback === 'incorrect' ? 'bg-red-100 text-red-800 border border-red-300'
-              : 'border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50'}`}>
-          <ThumbsDown className="w-3.5 h-3.5" /> No
-        </button>
+      {/* Feedback */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12,
+        paddingTop: 14, borderTop: '1px solid var(--border)',
+      }}>
+        <span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 500 }}>Was this prediction correct?</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className={`btn btn-sm ${feedback === 'correct' ? 'btn-success' : 'btn-ghost'}`}
+            onClick={() => submitFeedback('correct')}
+            disabled={!!feedback || busy}
+          >
+            <ThumbsUp size={12} /> Correct
+          </button>
+          <button
+            className={`btn btn-sm ${feedback === 'incorrect' ? 'btn-danger' : 'btn-ghost'}`}
+            onClick={() => submitFeedback('incorrect')}
+            disabled={!!feedback || busy}
+          >
+            <ThumbsDown size={12} /> Incorrect
+          </button>
+        </div>
         {onReset && (
-          <button onClick={onReset}
-            className="ml-auto flex items-center gap-1.5 px-4 py-1.5 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 transition-colors">
-            <RefreshCw className="w-3.5 h-3.5" /> Analyse Another
+          <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={onReset}>
+            Scan Another
           </button>
         )}
       </div>

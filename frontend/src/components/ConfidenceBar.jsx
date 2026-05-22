@@ -1,14 +1,14 @@
 export function ConfidenceBar({ confidence }) {
   const pct = Math.round(confidence);
-  const color = pct >= 80 ? 'bg-emerald-500' : pct >= 65 ? 'bg-yellow-500' : 'bg-red-500';
+  const color = pct >= 80 ? 'var(--green)' : pct >= 65 ? 'var(--amber)' : 'var(--red)';
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs text-gray-500">
-        <span>Confidence</span>
-        <span className="font-semibold text-gray-800">{pct}%</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+        <span style={{ color: 'var(--text2)', fontWeight: 500 }}>Confidence</span>
+        <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color }}>{pct}%</span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-2">
-        <div className={`h-2 rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
+      <div className="conf-track">
+        <div className="conf-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );

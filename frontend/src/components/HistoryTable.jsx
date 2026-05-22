@@ -1,67 +1,101 @@
-import { CheckCircle, XCircle, AlertTriangle, Trash2, Eye } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Trash2, Eye, ShieldAlert } from 'lucide-react';
 import { SeverityBadge } from './SeverityBadge';
 
 const IMAGE_BASE = '/api/v1/damage/images/';
-const STATUS_ICON = {
-  damaged:     <XCircle className="w-4 h-4 text-red-500" />,
-  not_damaged: <CheckCircle className="w-4 h-4 text-emerald-500" />,
-  uncertain:   <AlertTriangle className="w-4 h-4 text-amber-500" />,
+
+const STATUS_CFG = {
+  damaged:     { icon: XCircle,      color: 'var(--red)',   label: 'Damaged' },
+  not_damaged: { icon: CheckCircle2, color: 'var(--green)', label: 'Clear' },
+  uncertain:   { icon: AlertTriangle,color: 'var(--amber)', label: 'Uncertain' },
 };
 
 export function HistoryTable({ analyses, onView, onDelete }) {
   if (!analyses.length) return (
-    <div className="text-center py-16 text-gray-400">
-      <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
-      <p className="text-sm">No analyses found.</p>
+    <div style={{ padding: '72px 24px', textAlign: 'center', color: 'var(--text3)' }}>
+      <AlertTriangle size={28} style={{ margin: '0 auto 12px', color: 'var(--border2)' }} />
+      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)' }}>No records found</p>
+      <p style={{ fontSize: 13, marginTop: 4 }}>Try adjusting your filters above.</p>
     </div>
   );
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div style={{ overflowX: 'auto' }}>
+      <table className="tbl">
         <thead>
-          <tr className="border-b border-gray-200 text-left">
-            {['Image','File','Status','Confidence','Severity','Source','Date',''].map(h => (
-              <th key={h} className="pb-3 pr-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+          <tr>
+            {['Preview', 'File Name', 'Status', 'Confidence', 'Severity', 'Source', 'Date', ''].map(h => (
+              <th key={h}>{h}</th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
-          {analyses.map(a => (
-            <tr key={a.id} className="hover:bg-gray-50">
-              <td className="py-3 pr-3">
-                <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
-                  <img src={`${IMAGE_BASE}${a.image_path}`} alt="" className="w-full h-full object-cover"
-                    onError={e => { e.currentTarget.style.display = 'none'; }} />
-                </div>
-              </td>
-              <td className="py-3 pr-3 max-w-[160px]">
-                <p className="truncate text-gray-700 font-medium">{a.original_name || '—'}</p>
-                {a.is_flagged && <span className="text-xs text-yellow-700">⚠ Flagged</span>}
-              </td>
-              <td className="py-3 pr-3">
-                <div className="flex items-center gap-1.5">{STATUS_ICON[a.status]}<span className="capitalize text-gray-700">{a.status.replace('_',' ')}</span></div>
-              </td>
-              <td className="py-3 pr-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-16 bg-gray-100 rounded-full h-1.5">
-                    <div className={`h-1.5 rounded-full ${a.confidence>=80?'bg-emerald-500':a.confidence>=65?'bg-yellow-500':'bg-red-500'}`}
-                      style={{ width: `${a.confidence}%` }} />
+        <tbody>
+          {analyses.map(a => {
+            const cfg = STATUS_CFG[a.status] ?? STATUS_CFG.uncertain;
+            const Icon = cfg.icon;
+            return (
+              <tr key={a.id} className="tbl-row">
+                <td>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 8,
+                    overflow: 'hidden', background: 'var(--surface2)',
+                    border: '1px solid var(--border)', flexShrink: 0,
+                  }}>
+                    <img src={`${IMAGE_BASE}${a.image_path}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={e => { e.currentTarget.style.display = 'none'; }} />
                   </div>
-                  <span className="text-gray-600">{Math.round(a.confidence)}%</span>
-                </div>
-              </td>
-              <td className="py-3 pr-3"><SeverityBadge severity={a.severity} /></td>
-              <td className="py-3 pr-3 capitalize text-gray-500">{a.source}</td>
-              <td className="py-3 pr-3 text-gray-400 whitespace-nowrap">{new Date(a.created_at).toLocaleDateString()}</td>
-              <td className="py-3">
-                <div className="flex gap-1.5">
-                  <button onClick={() => onView(a)} className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg"><Eye className="w-4 h-4" /></button>
-                  <button onClick={() => onDelete(a)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td style={{ maxWidth: 180 }}>
+                  <p style={{ fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
+                    {a.original_name || '—'}
+                  </p>
+                  {a.is_flagged && (
+                    <span className="badge badge-amber" style={{ marginTop: 4, fontSize: 10 }}>
+                      <ShieldAlert size={9} /> Flagged
+                    </span>
+                  )}
+                </td>
+                <td>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: cfg.color }}>
+                    <Icon size={14} /> {cfg.label}
+                  </span>
+                </td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 60, height: 3, borderRadius: 99,
+                      background: 'var(--border2)', overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        height: '100%', borderRadius: 99,
+                        background: a.confidence >= 80 ? 'var(--green)' : a.confidence >= 65 ? 'var(--amber)' : 'var(--red)',
+                        width: `${a.confidence}%`,
+                      }} />
+                    </div>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text2)' }}>
+                      {Math.round(a.confidence)}%
+                    </span>
+                  </div>
+                </td>
+                <td><SeverityBadge severity={a.severity} /></td>
+                <td style={{ fontSize: 12, textTransform: 'capitalize' }}>{a.source}</td>
+                <td style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>
+                  {new Date(a.created_at).toLocaleDateString()}
+                </td>
+                <td>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-sm" onClick={() => onView(a)}
+                      style={{ background: 'var(--surface2)', color: 'var(--text2)', border: '1px solid var(--border)', padding: '5px 8px' }}>
+                      <Eye size={13} />
+                    </button>
+                    <button className="btn btn-sm btn-danger" onClick={() => onDelete(a)}
+                      style={{ padding: '5px 8px' }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

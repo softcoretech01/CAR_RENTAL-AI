@@ -1,22 +1,22 @@
 import { useState } from 'react';
-import { Upload, Camera, Loader2, AlertCircle } from 'lucide-react';
+import { Upload, Camera, Loader2, AlertCircle, ScanEye } from 'lucide-react';
 import { api } from '../lib/api';
 import { ImageUploader } from '../components/ImageUploader';
 import { WebcamCapture } from '../components/WebcamCapture';
 import { DamageResultCard } from '../components/DamageResultCard';
 
 const TABS = [
-  { id: 'upload', label: 'Upload', icon: Upload },
-  { id: 'webcam', label: 'Webcam', icon: Camera },
+  { id: 'upload', label: 'File Upload', icon: Upload },
+  { id: 'webcam', label: 'Live Webcam', icon: Camera },
 ];
 
 export default function Analyse() {
-  const [tab, setTab] = useState('upload');
-  const [file, setFile] = useState(null);
+  const [tab, setTab]           = useState('upload');
+  const [file, setFile]         = useState(null);
   const [webcamData, setWebcamData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [result, setResult]     = useState(null);
+  const [error, setError]       = useState(null);
 
   function reset() { setResult(null); setError(null); setFile(null); setWebcamData(null); }
 
@@ -24,61 +24,86 @@ export default function Analyse() {
     setError(null); setLoading(true);
     try {
       if (tab === 'upload') {
-        if (!file) { setError('Select an image first.'); return; }
+        if (!file) { setError('Please select an image file first.'); return; }
         setResult(await api.postFile('/damage/analyse', file));
       } else {
-        if (!webcamData) { setError('Capture a photo first.'); return; }
-        setResult(await api.post('/damage/analyse/webcam', {
-          image_data: webcamData,
-          original_name: `webcam_${Date.now()}.jpg`,
-        }));
+        if (!webcamData) { setError('Please capture a photo first.'); return; }
+        setResult(await api.post('/damage/analyse/webcam', { image_data: webcamData, original_name: `webcam_${Date.now()}.jpg` }));
       }
-    } catch (e) {
-      setError(e.message || 'Analysis failed.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setError(e.message || 'Analysis failed.'); }
+    finally { setLoading(false); }
   }
 
-  const canAnalyse = (tab === 'upload' && file) || (tab === 'webcam' && webcamData);
+  const canRun = (tab === 'upload' && file) || (tab === 'webcam' && webcamData);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="fade-up" style={{ maxWidth: 700, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Damage Detection</h1>
-        <p className="text-sm text-gray-500 mt-1">Upload or capture an image — AI analyses it in seconds.</p>
+        <h1 className="page-title">AI Damage Analysis</h1>
+        <p className="page-sub">Upload an image or capture a live frame to run AI damage diagnostics.</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="tabs">
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => { setTab(id); reset(); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
-              ${tab === id ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            <Icon className="w-4 h-4" />{label}
+          <button key={id} className={`tab ${tab === id ? 'active' : ''}`}
+            onClick={() => { setTab(id); reset(); }}>
+            <Icon size={14} /> {label}
           </button>
         ))}
       </div>
 
       {result ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-          <DamageResultCard result={result} onReset={reset} />
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Analysis Result</span>
+            <button className="btn btn-ghost btn-sm" onClick={reset}>← New Scan</button>
+          </div>
+          <div className="card-body">
+            <DamageResultCard result={result} onReset={reset} />
+          </div>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
-          {tab === 'upload' && <ImageUploader onFile={setFile} />}
-          {tab === 'webcam' && <WebcamCapture onCapture={setWebcamData} />}
-          {error && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />{error}
-            </div>
-          )}
-          <button onClick={analyse} disabled={!canAnalyse || loading}
-            className="w-full py-3 bg-violet-600 text-white font-semibold rounded-xl hover:bg-violet-700
-              disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Analysing with AI…</> : 'Analyse Image'}
-          </button>
-          {loading && <p className="text-center text-xs text-gray-400">Groq AI is examining your image — usually 3–8 seconds.</p>}
+        <div className="card">
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+            {tab === 'upload' && <ImageUploader onFile={setFile} />}
+            {tab === 'webcam' && <WebcamCapture onCapture={setWebcamData} />}
+
+            {error && (
+              <div style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+                background: 'var(--red-bg)', border: '1px solid rgba(255,84,84,.2)',
+                borderRadius: 10, padding: '12px 16px',
+              }}>
+                <AlertCircle size={15} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)' }}>Error</p>
+                  <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{error}</p>
+                </div>
+              </div>
+            )}
+
+            <button
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={analyse}
+              disabled={!canRun || loading}
+            >
+              {loading
+                ? <><Loader2 size={16} className="spin" /> Running AI diagnostics…</>
+                : <><ScanEye size={16} /> Run Damage Analysis</>
+              }
+            </button>
+
+            {loading && (
+              <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
+                Processing via Groq Vision · typically 3–6 seconds
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

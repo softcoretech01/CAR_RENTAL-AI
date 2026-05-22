@@ -2,27 +2,28 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { HistoryTable } from '../components/HistoryTable';
 import { DamageResultCard } from '../components/DamageResultCard';
-import { RefreshCw, Filter, X, ArrowLeft } from 'lucide-react';
+import { RefreshCw, Filter, X, ArrowLeft, Trash2 } from 'lucide-react';
+
+const PG = 20;
 
 export default function History() {
-  const [analyses, setAnalyses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
-  const [toDelete, setToDelete] = useState(null);
-  const [status, setStatus] = useState('');
-  const [severity, setSeverity] = useState('');
+  const [analyses, setAnalyses]     = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [selected, setSelected]     = useState(null);
+  const [toDelete, setToDelete]     = useState(null);
+  const [status, setStatus]         = useState('');
+  const [severity, setSeverity]     = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
-  const [page, setPage] = useState(0);
-  const PAGE = 20;
+  const [page, setPage]             = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      if (status) p.set('status', status);
-      if (severity) p.set('severity', severity);
+      if (status)     p.set('status',   status);
+      if (severity)   p.set('severity', severity);
       if (flaggedOnly) p.set('flagged', 'true');
-      p.set('limit', PAGE); p.set('offset', page * PAGE);
+      p.set('limit', PG); p.set('offset', page * PG);
       setAnalyses(await api.get(`/damage/history?${p}`));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -37,77 +38,130 @@ export default function History() {
     load();
   }
 
+  const hasFilter = status || severity || flaggedOnly;
+
   if (selected) return (
-    <div className="max-w-3xl mx-auto space-y-4">
-      <button onClick={() => setSelected(null)}
-        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="w-4 h-4" /> Back to History
+    <div className="fade-up" style={{ maxWidth: 760, margin: '0 auto' }}>
+      <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)} style={{ marginBottom: 18 }}>
+        <ArrowLeft size={13} /> Back
       </button>
-      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-        <DamageResultCard result={selected} />
+      <div className="card">
+        <div className="card-header"><span className="card-title">Analysis Detail</span></div>
+        <div className="card-body"><DamageResultCard result={selected} /></div>
       </div>
     </div>
   );
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analysis History</h1>
-          <p className="text-sm text-gray-500 mt-1">All past damage analyses.</p>
+          <h1 className="page-title">Analysis Archive</h1>
+          <p className="page-sub">Audit, inspect, and manage all historical inspection records.</p>
         </div>
-        <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+        <button className="btn btn-ghost" onClick={load}>
+          <RefreshCw size={13} className={loading ? 'spin' : ''} style={{ color: loading ? 'var(--violet)' : undefined }} />
+          Refresh
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-wrap items-center gap-3">
-        <Filter className="w-4 h-4 text-gray-400" />
-        {[['status', ['','damaged','not_damaged','uncertain'], status, v => { setStatus(v); setPage(0); }],
-          ['severity', ['','none','low','medium','high'], severity, v => { setSeverity(v); setPage(0); }]
-        ].map(([name, opts, val, setter]) => (
-          <select key={name} value={val} onChange={e => setter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-300">
-            {opts.map(o => <option key={o} value={o}>{o || `All ${name}s`}</option>)}
-          </select>
-        ))}
-        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
-          <input type="checkbox" checked={flaggedOnly} onChange={e => { setFlaggedOnly(e.target.checked); setPage(0); }}
-            className="rounded border-gray-300 text-violet-600" />
-          Flagged only
-        </label>
-        {(status || severity || flaggedOnly) && (
-          <button onClick={() => { setStatus(''); setSeverity(''); setFlaggedOnly(false); setPage(0); }}
-            className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600">
-            <X className="w-3.5 h-3.5" /> Clear
-          </button>
-        )}
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-        {loading ? (
-          <div className="flex items-center justify-center py-16 text-gray-400">
-            <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading…
+      {/* Filters */}
+      <div className="card" style={{ borderRadius: 10 }}>
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10,
+          padding: '12px 16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--violet)' }}>
+            <Filter size={13} />
+            <span className="section-label">Filters</span>
           </div>
-        ) : <HistoryTable analyses={analyses} onView={setSelected} onDelete={setToDelete} />}
 
-        <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100 text-sm text-gray-500">
-          <button onClick={() => setPage(p => Math.max(0, p-1))} disabled={page===0}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">← Previous</button>
-          <span>Page {page+1}</span>
-          <button onClick={() => setPage(p => p+1)} disabled={analyses.length < PAGE}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next →</button>
+          <select className="field" value={status} onChange={e => { setStatus(e.target.value); setPage(0); }}>
+            <option value="">All Statuses</option>
+            <option value="damaged">Damaged</option>
+            <option value="not_damaged">Not Damaged</option>
+            <option value="uncertain">Uncertain</option>
+          </select>
+
+          <select className="field" value={severity} onChange={e => { setSeverity(e.target.value); setPage(0); }}>
+            <option value="">All Severities</option>
+            <option value="none">None</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 500, color: 'var(--text2)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={flaggedOnly}
+              onChange={e => { setFlaggedOnly(e.target.checked); setPage(0); }}
+              style={{ accentColor: 'var(--violet)', width: 14, height: 14 }}
+            />
+            Flagged only
+          </label>
+
+          {hasFilter && (
+            <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }}
+              onClick={() => { setStatus(''); setSeverity(''); setFlaggedOnly(false); setPage(0); }}>
+              <X size={12} /> Clear
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Table */}
+      <div className="card">
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '80px 24px', color: 'var(--text2)' }}>
+            <RefreshCw size={18} className="spin" style={{ color: 'var(--violet)' }} />
+            <span style={{ fontSize: 13 }}>Loading records…</span>
+          </div>
+        ) : (
+          <>
+            <HistoryTable analyses={analyses} onView={setSelected} onDelete={setToDelete} />
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 20px', borderTop: '1px solid var(--border)',
+            }}>
+              <button className="btn btn-ghost btn-sm"
+                onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+                ← Prev
+              </button>
+              <span style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 500 }}>Page {page + 1}</span>
+              <button className="btn btn-ghost btn-sm"
+                onClick={() => setPage(p => p + 1)} disabled={analyses.length < PG}>
+                Next →
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Delete modal */}
       {toDelete && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4">
-            <h3 className="text-lg font-bold">Delete Analysis?</h3>
-            <p className="text-sm text-gray-500">Permanently removes the record and image.<br /><strong>{toDelete.original_name}</strong></p>
-            <div className="flex gap-3">
-              <button onClick={() => setToDelete(null)} className="flex-1 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={() => doDelete(toDelete)} className="flex-1 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">Delete</button>
+        <div className="overlay" onClick={() => setToDelete(null)}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--red-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Trash2 size={16} style={{ color: 'var(--red)' }} />
+              </div>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Delete Record?</h3>
+            </div>
+            <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>
+                This permanently removes the analysis and its stored image from disk.
+              </p>
+              <div style={{
+                background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+                padding: '8px 12px', fontSize: 12, fontFamily: 'var(--mono)',
+                color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {toDelete.original_name}
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setToDelete(null)}>Cancel</button>
+                <button className="btn btn-danger" style={{ flex: 1, justifyContent: 'center' }} onClick={() => doDelete(toDelete)}>Delete</button>
+              </div>
             </div>
           </div>
         </div>

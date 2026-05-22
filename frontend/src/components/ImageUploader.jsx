@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Upload, X, ImageIcon } from 'lucide-react';
+import { Upload, X, Image } from 'lucide-react';
 
 export function ImageUploader({ onFile }) {
   const ref = useRef(null);
@@ -11,11 +11,9 @@ export function ImageUploader({ onFile }) {
     setPreview(URL.createObjectURL(file));
     onFile(file);
   }
-
   function clear(e) {
     e.stopPropagation();
-    setPreview(null);
-    onFile(null);
+    setPreview(null); onFile(null);
     if (ref.current) ref.current.value = '';
   }
 
@@ -25,33 +23,46 @@ export function ImageUploader({ onFile }) {
       onDragOver={e => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={e => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files[0]); }}
-      className={`relative rounded-2xl border-2 border-dashed transition-all
-        ${dragging ? 'border-violet-400 bg-violet-50 scale-[1.01]'
-          : 'border-gray-300 bg-gray-50 hover:border-violet-400 hover:bg-violet-50'}
-        ${preview ? 'cursor-default' : 'cursor-pointer'}`}
-      style={{ minHeight: 240 }}
+      className={`drop-zone ${dragging ? 'dragging' : ''}`}
+      style={{ minHeight: 220, cursor: preview ? 'default' : 'pointer', position: 'relative' }}
     >
       <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
-        className="hidden" onChange={e => pick(e.target.files[0])} />
+        className="hidden" style={{ display: 'none' }} onChange={e => pick(e.target.files[0])} />
+
       {preview ? (
-        <div className="relative">
-          <img src={preview} alt="Preview" className="w-full rounded-2xl object-contain max-h-80" />
+        <>
+          <img src={preview} alt="Preview"
+            style={{ maxHeight: 220, maxWidth: '100%', objectFit: 'contain', borderRadius: 8, border: '1px solid var(--border)' }} />
           <button onClick={clear}
-            className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow border border-gray-200 hover:bg-red-50">
-            <X className="w-4 h-4 text-gray-600" />
+            style={{
+              position: 'absolute', top: 12, right: 12,
+              width: 28, height: 28, borderRadius: 7,
+              background: 'var(--surface)', border: '1px solid var(--border2)',
+              color: 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+            }}>
+            <X size={13} />
           </button>
-        </div>
+        </>
       ) : (
-        <div className="flex flex-col items-center justify-center gap-3 py-14 px-6 text-center">
-          <div className="p-4 bg-violet-100 rounded-full"><Upload className="w-8 h-8 text-violet-600" /></div>
+        <>
+          <div className="drop-zone-icon"><Upload size={22} /></div>
           <div>
-            <p className="font-semibold text-gray-700">Drop an image here</p>
-            <p className="text-sm text-gray-400 mt-1">or click to browse · JPG, PNG, WebP, GIF</p>
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+              Drop image here or click to browse
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4 }}>
+              JPG, PNG, WebP · Resized to 1024px
+            </p>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <ImageIcon className="w-3.5 h-3.5" /> Auto-resized to 1024px max
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+            color: 'var(--text3)', background: 'var(--surface2)',
+            border: '1px solid var(--border)', borderRadius: 20, padding: '4px 12px',
+          }}>
+            <Image size={11} /> Standard formats accepted
           </div>
-        </div>
+        </>
       )}
     </div>
   );
