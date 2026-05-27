@@ -1,48 +1,48 @@
 @import "tailwindcss";
 
-/* ─── DESIGN TOKENS — Light theme ───────────────────────────────── */
+/* ─── DESIGN TOKENS — White / Indigo / Slate theme ──────────────── */
 :root {
-  /* Page / content backgrounds */
-  --bg:         #f4f6fb;
+  /* Page / content backgrounds — true white */
+  --bg:         #ffffff;
   --surface:    #ffffff;
-  --surface2:   #f0f3f8;
-  --surface3:   #e8ecf4;
+  --surface2:   #f8fafc;
+  --surface3:   #f1f5f9;
 
   /* Borders */
-  --border:     #e2e6ee;
-  --border2:    #cdd3de;
+  --border:     #e2e8f0;
+  --border2:    #cbd5e1;
 
   /* Text */
-  --text:       #0f1117;
-  --text2:      #5c6474;
-  --text3:      #9aa2b0;
+  --text:       #0f172a;
+  --text2:      #475569;
+  --text3:      #94a3b8;
 
-  /* Sidebar — always dark */
-  --sb-bg:      #111118;
-  --sb-sf:      #16161f;
-  --sb-border:  #1d1d2a;
-  --sb-text:    #e4e4f0;
-  --sb-text2:   #6e6e9a;
-  --sb-text3:   #3e3e5a;
+  /* Sidebar — slate dark */
+  --sb-bg:      #0f172a;
+  --sb-sf:      #1e293b;
+  --sb-border:  #1e293b;
+  --sb-text:    #e2e8f0;
+  --sb-text2:   #64748b;
+  --sb-text3:   #334155;
 
-  /* Accents (tuned for light bg — slightly deeper) */
-  --violet:     #6d4ff5;
-  --violet-2:   #8b75ff;
-  --violet-bg:  rgba(109,79,245,.1);
-  --violet-glow:rgba(109,79,245,.18);
+  /* Primary accent — indigo */
+  --violet:     #4f46e5;
+  --violet-2:   #6366f1;
+  --violet-bg:  rgba(79,70,229,.08);
+  --violet-glow:rgba(79,70,229,.15);
 
-  --green:      #0aaa6a;
-  --green-bg:   rgba(10,170,106,.1);
-  --red:        #e53535;
-  --red-bg:     rgba(229,53,53,.1);
-  --amber:      #c97f00;
-  --amber-bg:   rgba(201,127,0,.1);
+  --green:      #16a34a;
+  --green-bg:   rgba(22,163,74,.08);
+  --red:        #dc2626;
+  --red-bg:     rgba(220,38,38,.08);
+  --amber:      #d97706;
+  --amber-bg:   rgba(217,119,6,.08);
 
-  --font: 'Outfit', -apple-system, sans-serif;
-  --mono: 'Space Mono', 'Courier New', monospace;
+  --font: 'Inter', 'Outfit', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'Space Mono', 'Courier New', monospace;
 
-  --radius:  10px;
-  --radius2: 14px;
+  --radius:  8px;
+  --radius2: 12px;
 
   --sidebar-w: 220px;
 }
@@ -57,6 +57,111 @@ body {
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── PROGRESS BAR ───────────────────────────────────────────────── */
+.progress-track {
+  height: 6px; background: var(--surface3); border-radius: 99px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 99px;
+  background: var(--violet);
+  transition: width .4s ease;
+}
+
+/* ─── WIZARD STEPS ───────────────────────────────────────────────── */
+.wizard-steps {
+  display: flex; align-items: center; gap: 0; margin-bottom: 32px;
+}
+.wizard-step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 500; color: var(--text3);
+}
+.wizard-step.active { color: var(--violet); font-weight: 600; }
+.wizard-step.done   { color: var(--green); }
+.wizard-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  background: var(--surface3); color: var(--text3);
+  border: 2px solid var(--border2); flex-shrink: 0;
+}
+.wizard-dot.active { background: var(--violet); color: #fff; border-color: var(--violet); }
+.wizard-dot.done   { background: var(--green);  color: #fff; border-color: var(--green); }
+.wizard-line {
+  flex: 1; height: 2px; background: var(--border); margin: 0 8px;
+  min-width: 20px;
+}
+.wizard-line.done { background: var(--green); }
+
+/* ─── PHOTO GRID ─────────────────────────────────────────────────── */
+.photo-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+}
+.photo-slot {
+  aspect-ratio: 4/3; border-radius: var(--radius);
+  border: 1px solid var(--border); overflow: hidden;
+  background: var(--surface2); position: relative;
+}
+.photo-slot img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.photo-slot-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; color: var(--text3); font-size: 11px; height: 100%;
+  cursor: pointer; transition: background .15s;
+}
+.photo-slot-empty:hover { background: var(--violet-bg); color: var(--violet); }
+
+/* ─── COMPARISON CARD ────────────────────────────────────────────── */
+.comparison-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius2); overflow: hidden;
+}
+.comparison-card.has-damage {
+  border-color: rgba(220,38,38,.3);
+  box-shadow: 0 0 0 3px rgba(220,38,38,.06);
+}
+.comparison-photos {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+}
+.comparison-photo {
+  position: relative; aspect-ratio: 4/3; background: var(--surface3);
+}
+.comparison-photo img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.comparison-photo-label {
+  position: absolute; top: 8px; left: 8px;
+  background: rgba(15,23,42,.7); color: #fff;
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 4px; letter-spacing: .06em;
+}
+.bbox-overlay {
+  position: absolute; border: 2px solid #ef4444;
+  background: rgba(239,68,68,.12); border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ─── VEHICLE CARD ───────────────────────────────────────────────── */
+.vehicle-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius2); padding: 18px 20px;
+  transition: box-shadow .2s, transform .2s;
+  cursor: pointer; position: relative; overflow: hidden;
+}
+.vehicle-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,.08);
+  transform: translateY(-2px);
+}
+.vehicle-card.available::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--green);
+}
+.vehicle-card.rented_out::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--amber);
 }
 
 a { text-decoration: none; color: inherit; }

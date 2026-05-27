@@ -1,7 +1,8 @@
 # Car Rental Damage Detector — Design Spec
 **Date:** 2026-05-26  
 **Status:** Approved  
-**Stack:** FastAPI · React · MySQL · Groq Vision AI
+**Stack:** FastAPI · React · MySQL · Groq Vision AI  
+**Theme:** White background, subtle color palette (light grays, muted indigo/slate accents)
 
 ---
 

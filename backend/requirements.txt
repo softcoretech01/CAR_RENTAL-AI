@@ -8,3 +8,4 @@ pillow>=10.0.0
 python-multipart>=0.0.9
 PyMySQL>=1.1.0
 cryptography>=41.0.0
+weasyprint>=62.0

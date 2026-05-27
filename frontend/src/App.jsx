@@ -1,21 +1,23 @@
 import { useState } from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import {
-  LayoutDashboard, ScanSearch, Layers, History,
-  GitCompare, Zap, ChevronLeft, Menu,
+  LayoutDashboard, Car, ClipboardList, PlusCircle,
+  History, ChevronLeft, Menu,
 } from 'lucide-react';
-import Dashboard   from './pages/Dashboard';
-import Analyse     from './pages/Analyse';
-import Batch       from './pages/Batch';
-import HistoryPage from './pages/History';
-import Compare     from './pages/Compare';
+
+import FleetDashboard    from './pages/FleetDashboard';
+import Vehicles          from './pages/Vehicles';
+import NewRentalWizard   from './pages/NewRentalWizard';
+import RentalHistory     from './pages/RentalHistory';
+import RentalDetail      from './pages/RentalDetail';
+import InspectionWizard  from './pages/InspectionWizard';
+import ComparisonResult  from './pages/ComparisonResult';
 
 const NAV = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/analyse',   label: 'Analyse',   icon: ScanSearch },
-  { path: '/batch',     label: 'Batch',     icon: Layers },
-  { path: '/history',   label: 'History',   icon: History },
-  { path: '/compare',   label: 'Compare',   icon: GitCompare },
+  { path: '/',              label: 'Fleet',       icon: LayoutDashboard, end: true },
+  { path: '/vehicles',      label: 'Vehicles',    icon: Car },
+  { path: '/rentals/new',   label: 'New Rental',  icon: PlusCircle },
+  { path: '/rentals',       label: 'Rentals',     icon: ClipboardList },
 ];
 
 const W_OPEN   = 220;
@@ -35,9 +37,9 @@ export default function App() {
         <div className="sidebar-brand">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <div className="brand-logo">
-              <Zap size={15} color="#fff" />
+              <Car size={15} color="#fff" />
             </div>
-            {open && <span className="brand-name">DamageAI</span>}
+            {open && <span className="brand-name">RentalScan</span>}
           </div>
           <button className="sidebar-toggle" onClick={() => setOpen(o => !o)}>
             {open ? <ChevronLeft size={15} /> : <Menu size={15} />}
@@ -46,9 +48,9 @@ export default function App() {
 
         {/* Nav links */}
         <div className="sidebar-nav">
-          {NAV.map(({ path, label, icon: Icon }) => (
+          {NAV.map(({ path, label, icon: Icon, end }) => (
             <NavLink
-              key={path} to={path}
+              key={path} to={path} end={end}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               title={!open ? label : undefined}
             >
@@ -63,7 +65,7 @@ export default function App() {
           {open ? (
             <div className="status-row">
               <div className="status-dot" />
-              <span className="status-label">SQLite · Groq Vision</span>
+              <span className="status-label">MySQL · Groq Vision</span>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -85,20 +87,22 @@ export default function App() {
             LIVE
           </div>
           <div className="topbar-user">
-            <div className="user-avatar">A</div>
-            <span className="user-label">Administrator</span>
+            <div className="user-avatar">R</div>
+            <span className="user-label">Rental Admin</span>
           </div>
         </header>
 
         {/* Pages */}
         <main className="page">
           <Routes>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/analyse"   element={<Analyse />} />
-            <Route path="/batch"     element={<Batch />} />
-            <Route path="/history"   element={<HistoryPage />} />
-            <Route path="/compare"   element={<Compare />} />
+            <Route index                                    element={<FleetDashboard />} />
+            <Route path="/vehicles"                         element={<Vehicles />} />
+            <Route path="/rentals/new"                      element={<NewRentalWizard />} />
+            <Route path="/rentals"                          element={<RentalHistory />} />
+            <Route path="/rentals/:id"                      element={<RentalDetail />} />
+            <Route path="/rentals/:id/inspect/:type"        element={<InspectionWizard />} />
+            <Route path="/rentals/:id/comparison"           element={<ComparisonResult />} />
+            <Route path="*"                                 element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>

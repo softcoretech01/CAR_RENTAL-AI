@@ -1,0 +1,125 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "DamageAI — Architecture Tour",
+  "description": "End-to-end walkthrough of the DamageAI damage-detection system: launcher → FastAPI backend → MySQL stored procedures → AI service → React frontend → continuous learning loop.",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": ".",
+      "title": "Project Root",
+      "description": "DamageAI is a **full-stack AI inspection tool** — upload or webcam-capture a photo, get back a damage verdict with confidence score, severity level, damage type tags, bounding boxes, and a 2–3 sentence AI assessment.\n\nTwo top-level directories:\n- `backend/` — FastAPI + MySQL (PyMySQL + stored procedures)\n- `frontend/` — React 19 + Vite + React Router\n\nEverything launches from a single shell script."
+    },
+    {
+      "file": "start.sh",
+      "line": 8,
+      "title": "One-Command Launcher",
+      "description": "**`start.sh`** bootstraps the full stack in one shot:\n1. Guards against a missing `.env` (fails fast with a hint)\n2. Creates the Python venv on first run and installs `requirements.txt`\n3. Installs frontend `node_modules` if missing\n4. Starts `uvicorn` (`:8000`) and `npm run dev` (`:5173`) as background jobs\n5. Registers a `trap` on `SIGINT`/`SIGTERM` so `Ctrl+C` kills both processes cleanly\n\n**Gotcha:** The frontend Vite dev server proxies `/api/v1/*` to the backend — look in `vite.config.js` to see that wiring. Without it the browser would hit CORS at the Vite origin."
+    },
+    {
+      "file": "backend/app/main.py",
+      "line": 7,
+      "title": "FastAPI Entry Point & Lifespan",
+      "description": "The FastAPI app is created with a **lifespan context manager** (the modern FastAPI pattern, replacing `@app.on_event('startup')`).\n\n`init_db()` fires once at startup — it creates the MySQL tables and (re)creates all stored procedures. This makes every restart idempotent: you never need a separate migration step during development.\n\nCORS is set to `allow_origins=[\"*\"]` — fine for a local tool, but scope it down before any public deployment.\n\nThe entire API lives under one router prefix: `/api/v1`."
+    },
+    {
+      "file": "backend/app/config.py",
+      "line": 3,
+      "title": "Provider-Agnostic Configuration",
+      "description": "All runtime settings are in a single `Settings` class backed by `pydantic-settings`. Changing the AI provider is just three env-var swaps:\n\n| Var | Default (Groq) | Swap to OpenAI |\n|---|---|---|\n| `AI_BASE_URL` | `https://api.groq.com/openai/v1` | `https://api.openai.com/v1` |\n| `AI_MODEL` | `meta-llama/llama-4-scout-17b-16e-instruct` | `gpt-4o-mini` |\n| `AI_API_KEY` | Groq key | OpenAI key |\n\nThe MySQL connection block (`DB_HOST`, `DB_PORT`, etc.) is also here — previously SQLite, migrated to MySQL in a later commit.\n\n**Gotcha:** `DB_PASS` defaults to an empty string, so a MySQL server with no root password works out of the box but you **must** set a real password before production."
+    },
+    {
+      "file": "backend/app/database.py",
+      "line": 80,
+      "title": "Schema — Tables Defined in Code",
+      "description": "The two tables — `damage_batches` and `damage_analyses` — are created with `CREATE TABLE IF NOT EXISTS` directly in Python source. There is no separate migrations directory.\n\n`damage_analyses.batch_id` FK → `damage_batches.id` with `ON DELETE SET NULL`, so deleting a batch orphans its analyses rather than cascade-deleting them.\n\nJSON columns (`damage_types`, `bounding_boxes`) are MySQL native JSON. `is_flagged` is a `TINYINT(1)` — PyMySQL returns it as an integer; `row_to_dict()` normalises it to a Python `bool`."
+    },
+    {
+      "file": "backend/app/database.py",
+      "line": 113,
+      "title": "All SQL Lives in Stored Procedures",
+      "description": "This is the central architectural decision of the data layer: **the application never writes raw SQL**. Instead `database.py` defines every query as a stored procedure and `init_db()` drops + recreates them on every startup.\n\nThe list has 11 procedures covering:\n- Batch lifecycle (`sp_create_batch`, `sp_get_batch`, `sp_list_batches`, `sp_refresh_batch_counts`)\n- Analysis CRUD (`sp_create_analysis`, `sp_get_analysis`, `sp_list_analyses`, `sp_update_feedback`, `sp_delete_analysis`)\n- Learning + stats (`sp_get_few_shot_examples`, `sp_get_summary_stats`, `sp_get_flagged_items`, `sp_get_incorrect_items`)\n\n**Gotcha:** `sp_list_analyses` uses `PREPARE`/`EXECUTE` for dynamic WHERE clauses. The string inputs are escaped via MySQL's `QUOTE()` function rather than parameterized through PyMySQL — this is intentional but worth auditing if filter columns expand."
+    },
+    {
+      "file": "backend/app/database.py",
+      "line": 314,
+      "title": "init_db() — Idempotent Bootstrap",
+      "description": "`init_db()` runs on every process start:\n1. Splits the `_CREATE_TABLES` string on `;` and executes each `CREATE TABLE IF NOT EXISTS` individually (PyMySQL doesn't support multi-statement execution by default)\n2. For each stored procedure: `DROP PROCEDURE IF EXISTS`, then `CREATE PROCEDURE`\n\nThis pattern means **you never need manual migration scripts** during iterative dev — but it also means schema changes to existing tables (adding a column, changing a type) are *not* handled here; you'd need an ALTER or a separate migration for those."
+    },
+    {
+      "file": "backend/app/damage/crud.py",
+      "line": 14,
+      "title": "CRUD Layer — Thin Stored-Procedure Wrappers",
+      "description": "The CRUD module is deliberately thin. Every function is either:\n- `_call_one(conn, sp, args)` — one stored procedure call, returns first row or `None`\n- `_call_many(conn, sp, args)` — returns all rows\n\nBoth pass through `row_to_dict()` which normalises JSON columns, booleans, and datetimes. This is the **only** place in the backend where database results are post-processed.\n\nAll JSON columns (`damage_types`, `bounding_boxes`) are serialised with `json.dumps()` before passing to MySQL and deserialised in `row_to_dict()` on the way back."
+    },
+    {
+      "file": "backend/app/damage/ai_service.py",
+      "line": 7,
+      "title": "AI Prompt — Structured JSON Output",
+      "description": "The system prompt instructs the model to return **only a JSON object** — no markdown fences, no extra text. The schema it must follow:\n\n```json\n{\n  \"status\": \"damaged|not_damaged|uncertain\",\n  \"confidence\": 0–100,\n  \"severity\": \"none|low|medium|high\",\n  \"damage_types\": [\"scratch\",\"crack\",\"dent\",…],\n  \"region_description\": \"…\",\n  \"explanation\": \"…\",\n  \"bounding_boxes\": [[ymin,xmin,ymax,xmax],…]\n}\n```\n\nBounding box coordinates are **normalised percentages** of image dimensions (0–100), not pixels. The frontend renders them as `position: absolute` overlays using the same percentage values as CSS `top`/`left`/`width`/`height`."
+    },
+    {
+      "file": "backend/app/damage/ai_service.py",
+      "line": 33,
+      "title": "Vision Call + Few-Shot Injection",
+      "description": "`analyse_bytes()` is the core AI call:\n1. Base64-encodes the image\n2. If `few_shots` is non-empty, appends them to the system prompt — this is the **continuous learning mechanism**: past analyses the user marked *Incorrect* are injected as counter-examples\n3. Calls the OpenAI-compatible endpoint with `image_url` content type (works with Groq, Gemini, OpenAI)\n4. Passes the raw response text to `_parse()`\n\n`_parse()` is defensively written: it strips markdown fences, tries `json.loads`, falls back to a regex extraction, and falls back again to a `_fallback()` dict. The app never crashes on unparseable AI output."
+    },
+    {
+      "file": "backend/app/damage/service.py",
+      "line": 14,
+      "title": "Image Pipeline — Resize Before AI",
+      "description": "`_save()` handles image normalisation:\n1. Opens the raw bytes with Pillow\n2. If the longest side exceeds `DAMAGE_IMAGE_MAX_PX` (default 1024px), thumbnails it with Lanczos resampling\n3. Saves as JPEG (85 quality) or PNG based on the original extension\n4. Generates a UUID-hex filename — no original filename is used in storage, preventing path traversal\n\nIf Pillow fails for any reason (corrupt file, unsupported format), it falls back to writing the raw bytes unchanged — the AI call will still attempt to process it."
+    },
+    {
+      "file": "backend/app/damage/service.py",
+      "line": 53,
+      "title": "Auto-Flagging Threshold",
+      "description": "`is_flagged()` is a one-liner but architecturally important: any analysis whose confidence falls below `DAMAGE_CONFIDENCE_THRESHOLD` (default 65%) is automatically flagged.\n\nFlagged items:\n- Appear in the Dashboard's \"Action Queue\"\n- Show a warning banner in `DamageResultCard`\n- Are counted in batch summary stats\n\nThe threshold is tunable via env var without code changes — lower it to cast a wider net, raise it to reduce noise."
+    },
+    {
+      "file": "backend/app/damage/router.py",
+      "line": 18,
+      "title": "API Routes — Three Analysis Paths",
+      "description": "The router provides three ways to submit an image:\n1. **`POST /damage/analyse`** — multipart file upload, source = `'upload'`\n2. **`POST /damage/analyse/webcam`** — base64 JSON body, source = `'webcam'`  \n3. **`POST /damage/batch/{batch_id}/analyse`** — file upload within a batch; also calls `refresh_batch_counts()` after each image\n\nAll three paths share the same flow:\n1. Fetch few-shot examples from DB\n2. Run `service.process_upload()` or `service.process_base64()`\n3. Persist via `crud.create_analysis()`\n4. Return `AnalysisOut`\n\n**Gotcha:** The single-image endpoint wraps `RuntimeError` as HTTP 503 (AI provider unavailable) but the batch endpoint doesn't — a failing image in a batch returns HTTP 500 and stops the entire request rather than being captured per-item. The frontend handles this with a per-item try/catch."
+    },
+    {
+      "file": "frontend/src/lib/api.js",
+      "line": 1,
+      "title": "Frontend API Client — Minimal Fetch Wrapper",
+      "description": "The entire frontend HTTP layer is 26 lines. Five methods: `get`, `post`, `patch`, `delete`, `postFile`.\n\nAll requests are relative to `/api/v1` — Vite's dev proxy rewrites them to `http://localhost:8000/api/v1`. In production the built files are served from a static host that reverse-proxies the same path to the backend.\n\n`handle()` is the common response normaliser: 204 → `null`, ok → `.json()`, error → throws with the response body text as the message. No retry logic, no request interceptors, no auth headers — appropriate for a local tool."
+    },
+    {
+      "file": "frontend/src/App.jsx",
+      "line": 95,
+      "title": "App Shell — Sidebar Layout + Routes",
+      "description": "The shell is a collapsible sidebar (`W_OPEN = 220px`, `W_CLOSED = 60px`) with animated `padding-left` on the main content area — no CSS grid columns, just a CSS transition on padding.\n\nFive routes:\n- `/dashboard` — stats overview + flagged queue + learning loop\n- `/analyse` — single-image analysis\n- `/batch` — up to 50 images, sequential processing\n- `/history` — filterable paginated list of all analyses\n- `/compare` — side-by-side diff of any two analyses\n\nAll routes are eagerly loaded (no `React.lazy`) — fine given the small bundle size."
+    },
+    {
+      "file": "frontend/src/pages/Analyse.jsx",
+      "line": 23,
+      "title": "Analyse Page — Upload or Webcam",
+      "description": "The `analyse()` function dispatches to the correct endpoint based on the active tab:\n- `upload` → `api.postFile('/damage/analyse', file)` — FormData with the raw `File` object\n- `webcam` → `api.post('/damage/analyse/webcam', { image_data, original_name })` — base64 string from `WebcamCapture`\n\nOnce a result is returned, the entire input UI is replaced by a `DamageResultCard`. The `reset()` function restores the input state for a new scan.\n\n**Gotcha:** The webcam path sends a timestamped filename (`webcam_${Date.now()}.jpg`) — the backend stores this as `original_name` and uses it in the continuous learning few-shot examples, so the display name in the Dashboard learning pool will be a timestamp string rather than a meaningful file name."
+    },
+    {
+      "file": "frontend/src/components/DamageResultCard.jsx",
+      "line": 76,
+      "title": "Bounding Box Overlay — Percentage CSS",
+      "description": "When `status === 'damaged'` and `bounding_boxes` is non-empty, each box is rendered as an absolutely-positioned `div` overlay on the image:\n\n```jsx\ntop:    `${ymin}%`\nleft:   `${xmin}%`\nheight: `${ymax - ymin}%`\nwidth:  `${xmax - xmin}%`\n```\n\nBecause the AI returns normalised coordinates (0–100 as percentage of image dimensions) and CSS `position: absolute` with `%` units is relative to the containing block, this **only works correctly** when the image fills its container without letterboxing. The current `objectFit: 'contain'` on the `<img>` can create letterboxed space — boxes will be misaligned if the image aspect ratio differs from the container. A known limitation worth addressing."
+    },
+    {
+      "file": "frontend/src/components/DamageResultCard.jsx",
+      "line": 24,
+      "title": "Feedback Loop — Closing the Continuous Learning Cycle",
+      "description": "The `submitFeedback()` function is where the **continuous learning loop** closes:\n1. User clicks **Correct** or **Incorrect**\n2. `PATCH /damage/analyses/{id}/feedback` persists `user_feedback` in MySQL via `sp_update_feedback`\n3. On the next analysis request, the router fetches few-shot examples via `sp_get_few_shot_examples` — which queries `WHERE user_feedback = 'incorrect'`\n4. Those examples are appended to the AI system prompt in `ai_service.analyse_bytes()`\n\nThe loop: bad prediction → user flags → feeds back into prompt → AI corrects similar cases. The Dashboard's \"Continuous Learning Loop\" card shows the active correction pool.\n\nFeedback is **one-shot**: the button disables after submission (`disabled={!!feedback || busy}`), preventing double-voting."
+    },
+    {
+      "file": "backend/app/damage/crud.py",
+      "line": 120,
+      "title": "Few-Shot Examples — Where Learning Enters the Prompt",
+      "description": "`get_few_shot_examples()` calls `sp_get_few_shot_examples(5)` — the last 5 user-corrected predictions, ordered by recency.\n\nThe procedure selects `original_name`, `status`, `confidence`, and `explanation` from analyses where `user_feedback = 'incorrect'`. These are then formatted in `ai_service.analyse_bytes()` as natural-language sentences appended to the system prompt:\n\n> *\"Image 'IMG_001.jpg' had feedback: Predicted 'not_damaged' with confidence 78% was marked as INCORRECT by the user.\"*\n\nThis is prompt-level few-shot learning — no model fine-tuning, just context injection. The window is capped at 5 to stay within token budgets."
+    },
+    {
+      "title": "Architecture Summary & Key Decisions",
+      "description": "## DamageAI Architecture in Brief\n\n**Request path for a single image:**\n```\nBrowser → Vite proxy → POST /api/v1/damage/analyse\n  → router.py validates MIME type\n  → crud.get_few_shot_examples() fetches learning pool\n  → service.process_upload() resizes + saves image (UUID name)\n  → ai_service.analyse_bytes() → Groq / OpenAI vision API\n  → _parse() normalises JSON response\n  → service.is_flagged() thresholds confidence\n  → crud.create_analysis() → sp_create_analysis stored proc\n  → AnalysisOut Pydantic response → browser\n  → DamageResultCard renders result + bounding boxes\n  → User feedback → PATCH feedback endpoint → learning pool\n```\n\n**Notable trade-offs:**\n| Decision | Benefit | Watch out |\n|---|---|---|\n| All SQL in stored procedures | Centralised SQL, clean app code | Schema changes need manual `ALTER TABLE` |\n| `init_db()` on every restart | Zero-migration dev workflow | Not suitable for multi-instance deploys |\n| Provider-agnostic AI via OpenAI SDK | Easy provider swap | Vision API compatibility varies by provider |\n| Bounding boxes as % CSS | No server-side computation | Misaligns with `objectFit: contain` images |\n| Few-shot learning via prompt injection | No fine-tuning required | Prompt grows with corrections; capped at 5 |"
+    }
+  ]
+}
