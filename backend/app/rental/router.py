@@ -13,8 +13,8 @@ from app.rental import crud, service
 from app.rental.schemas import (
     VehicleCreate, VehicleUpdate, VehicleOut,
     CustomerCreate, CustomerOut,
-    RentalCreate, RentalStatusUpdate, RentalOut,
-    PositionCreate, PositionOut,
+    RentalCreate, RentalUpdate, RentalStatusUpdate, RentalOut,
+    PositionCreate, PositionUpdate, PositionOut,
     InspectionOut, InspectionPhotoOut,
     ComparisonResultOut, ComparisonItemOut, ComparisonFullOut,
     FleetStatsOut,
@@ -110,6 +110,25 @@ def get_rental(rental_id: int):
     return row
 
 
+@router.patch("/rentals/{rental_id}", response_model=RentalOut)
+def update_rental(rental_id: int, body: RentalUpdate):
+    with get_db() as conn:
+        row = crud.update_rental(conn, rental_id, **body.model_dump())
+    if not row:
+        raise HTTPException(404, "Rental not found")
+    return row
+
+
+@router.delete("/rentals/{rental_id}", status_code=204)
+def delete_rental(rental_id: int):
+    with get_db() as conn:
+        ok, reason = crud.delete_rental(conn, rental_id)
+    if not ok:
+        if reason == "not_found":
+            raise HTTPException(404, "Rental not found")
+        raise HTTPException(409, "Cannot delete a rental that has already been activated. Only pre-inspection pending rentals can be deleted.")
+
+
 @router.patch("/rentals/{rental_id}/status", response_model=RentalOut)
 def update_rental_status(rental_id: int, body: RentalStatusUpdate):
     with get_db() as conn:
@@ -137,12 +156,21 @@ def create_position(body: PositionCreate):
     return row
 
 
+@router.patch("/positions/{position_id}", response_model=PositionOut)
+def update_position(position_id: int, body: PositionUpdate):
+    with get_db() as conn:
+        row = crud.update_position(conn, position_id, **body.model_dump())
+    if not row:
+        raise HTTPException(404, "Position not found")
+    return row
+
+
 @router.delete("/positions/{position_id}", status_code=204)
 def delete_position(position_id: int):
     with get_db() as conn:
         ok = crud.delete_position(conn, position_id)
     if not ok:
-        raise HTTPException(409, "Cannot delete a default position")
+        raise HTTPException(404, "Position not found")
 
 
 # ─── Inspections ──────────────────────────────────────────────────────────────

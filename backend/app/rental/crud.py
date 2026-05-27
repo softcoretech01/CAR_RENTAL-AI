@@ -69,8 +69,11 @@ def delete_vehicle(conn, vehicle_id: int) -> bool:
 # ─── Customers ────────────────────────────────────────────────────────────────
 
 def create_customer(conn, *, full_name: str, phone: str,
-                    email: str | None, id_number: str) -> dict:
-    return _call_one(conn, "sp_create_customer", (full_name, phone, email, id_number))
+                    email: str | None, id_number: str,
+                    address: str | None = None,
+                    license_expiry: str | None = None) -> dict:
+    return _call_one(conn, "sp_create_customer",
+                     (full_name, phone, email, id_number, address, license_expiry))
 
 
 def list_customers(conn, search: str | None = None) -> list[dict]:
@@ -85,9 +88,16 @@ def get_customer(conn, customer_id: int) -> dict | None:
 
 def create_rental(conn, *, vehicle_id: int, customer_id: int,
                   start_date: str, expected_return_date: str,
-                  notes: str | None) -> dict:
-    return _call_one(conn, "sp_create_rental",
-                     (vehicle_id, customer_id, start_date, expected_return_date, notes))
+                  notes: str | None,
+                  pickup_location: str | None = None,
+                  dropoff_location: str | None = None,
+                  fuel_level_pickup: str | None = None,
+                  odometer_pickup: int | None = None,
+                  daily_rate: float | None = None) -> dict:
+    return _call_one(conn, "sp_create_rental", (
+        vehicle_id, customer_id, start_date, expected_return_date, notes,
+        pickup_location, dropoff_location, fuel_level_pickup, odometer_pickup, daily_rate,
+    ))
 
 
 def list_rentals(conn, status: str | None = None, vehicle_id: int | None = None,
@@ -105,6 +115,22 @@ def update_rental_status(conn, rental_id: int, new_status: str,
                      (rental_id, new_status, actual_return_date))
 
 
+def update_rental(conn, rental_id: int, *, expected_return_date: str,
+                  notes: str | None, daily_rate: float | None,
+                  pickup_location: str | None, dropoff_location: str | None) -> dict | None:
+    return _call_one(conn, "sp_update_rental",
+                     (rental_id, expected_return_date, notes, daily_rate,
+                      pickup_location, dropoff_location))
+
+
+def delete_rental(conn, rental_id: int) -> tuple[bool, str]:
+    """Returns (success, reason). reason is '' on success, 'not_found' or 'already_active' on failure."""
+    row = _call_one(conn, "sp_delete_rental", (rental_id,))
+    if not row:
+        return False, "not_found"
+    return bool(row.get("deleted")), row.get("reason", "")
+
+
 def get_rentals_for_vehicle(conn, vehicle_id: int, limit: int = 10) -> list[dict]:
     return _call_many(conn, "sp_get_rentals_for_vehicle", (vehicle_id, limit))
 
@@ -117,6 +143,10 @@ def list_positions(conn) -> list[dict]:
 
 def create_position(conn, *, name: str, sort_order: int = 99) -> dict:
     return _call_one(conn, "sp_create_position", (name, sort_order))
+
+
+def update_position(conn, position_id: int, *, name: str, sort_order: int) -> dict | None:
+    return _call_one(conn, "sp_update_position", (position_id, name, sort_order))
 
 
 def delete_position(conn, position_id: int) -> bool:

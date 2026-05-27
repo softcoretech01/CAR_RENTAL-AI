@@ -69,7 +69,7 @@ def row_to_dict(row: dict | None) -> dict | None:
             d[field] = bool(d[field])
 
     # DATE fields → "YYYY-MM-DD"
-    for field in ("start_date", "expected_return_date", "actual_return_date"):
+    for field in ("start_date", "expected_return_date", "actual_return_date", "license_expiry"):
         if field in d:
             v = d[field]
             if isinstance(v, (datetime, date)):
@@ -107,12 +107,14 @@ CREATE TABLE IF NOT EXISTS vehicles (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS customers (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    full_name  VARCHAR(255) NOT NULL,
-    phone      VARCHAR(50) NOT NULL,
-    email      VARCHAR(255),
-    id_number  VARCHAR(100) NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    full_name       VARCHAR(255) NOT NULL,
+    phone           VARCHAR(50) NOT NULL,
+    email           VARCHAR(255),
+    id_number       VARCHAR(100) NOT NULL,
+    address         TEXT,
+    license_expiry  DATE,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS rentals (
@@ -124,6 +126,11 @@ CREATE TABLE IF NOT EXISTS rentals (
     actual_return_date   DATE,
     status               ENUM('pre_inspection_pending','pre_inspection_done','rented_out','post_inspection_pending','comparing','completed') NOT NULL DEFAULT 'pre_inspection_pending',
     notes                TEXT,
+    pickup_location      VARCHAR(255),
+    dropoff_location     VARCHAR(255),
+    fuel_level_pickup    VARCHAR(10),
+    odometer_pickup      INT,
+    daily_rate           DECIMAL(10,2),
     created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (vehicle_id)  REFERENCES vehicles(id)  ON DELETE RESTRICT,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
@@ -203,6 +210,18 @@ _DEFAULT_POSITIONS = [
     ("Engine Bay", 15),
 ]
 
+# Column migrations — add new columns to existing tables (idempotent, checked via information_schema)
+_COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
+    # (table_name, column_name, column_definition)
+    ("customers", "address",          "TEXT NULL"),
+    ("customers", "license_expiry",   "DATE NULL"),
+    ("rentals",   "pickup_location",  "VARCHAR(255) NULL"),
+    ("rentals",   "dropoff_location", "VARCHAR(255) NULL"),
+    ("rentals",   "fuel_level_pickup","VARCHAR(10)  NULL"),
+    ("rentals",   "odometer_pickup",  "INT NULL"),
+    ("rentals",   "daily_rate",       "DECIMAL(10,2) NULL"),
+]
+
 _STORED_PROCEDURES: list[tuple[str, str]] = [
 
     # ── Vehicles ───────────────────────────────────────────────────────────────
@@ -278,14 +297,16 @@ _STORED_PROCEDURES: list[tuple[str, str]] = [
 
     ("sp_create_customer", """
         CREATE PROCEDURE sp_create_customer(
-            IN p_full_name VARCHAR(255),
-            IN p_phone     VARCHAR(50),
-            IN p_email     VARCHAR(255),
-            IN p_id_number VARCHAR(100)
+            IN p_full_name      VARCHAR(255),
+            IN p_phone          VARCHAR(50),
+            IN p_email          VARCHAR(255),
+            IN p_id_number      VARCHAR(100),
+            IN p_address        TEXT,
+            IN p_license_expiry DATE
         )
         BEGIN
-            INSERT INTO customers (full_name, phone, email, id_number)
-            VALUES (p_full_name, p_phone, p_email, p_id_number);
+            INSERT INTO customers (full_name, phone, email, id_number, address, license_expiry)
+            VALUES (p_full_name, p_phone, p_email, p_id_number, p_address, p_license_expiry);
             SELECT * FROM customers WHERE id = LAST_INSERT_ID();
         END
     """),
@@ -320,13 +341,20 @@ _STORED_PROCEDURES: list[tuple[str, str]] = [
             IN p_customer_id          INT,
             IN p_start_date           DATE,
             IN p_expected_return_date DATE,
-            IN p_notes                TEXT
+            IN p_notes                TEXT,
+            IN p_pickup_location      VARCHAR(255),
+            IN p_dropoff_location     VARCHAR(255),
+            IN p_fuel_level_pickup    VARCHAR(10),
+            IN p_odometer_pickup      INT,
+            IN p_daily_rate           DECIMAL(10,2)
         )
         BEGIN
             INSERT INTO rentals
-                (vehicle_id, customer_id, start_date, expected_return_date, notes)
+                (vehicle_id, customer_id, start_date, expected_return_date, notes,
+                 pickup_location, dropoff_location, fuel_level_pickup, odometer_pickup, daily_rate)
             VALUES
-                (p_vehicle_id, p_customer_id, p_start_date, p_expected_return_date, p_notes);
+                (p_vehicle_id, p_customer_id, p_start_date, p_expected_return_date, p_notes,
+                 p_pickup_location, p_dropoff_location, p_fuel_level_pickup, p_odometer_pickup, p_daily_rate);
             UPDATE vehicles SET status = 'rented_out' WHERE id = p_vehicle_id;
             SELECT r.*,
                    v.make, v.model, v.year, v.color, v.plate_number, v.category,
@@ -442,17 +470,20 @@ _STORED_PROCEDURES: list[tuple[str, str]] = [
         END
     """),
 
+    ("sp_update_position", """
+        CREATE PROCEDURE sp_update_position(IN p_id INT, IN p_name VARCHAR(100), IN p_sort_order INT)
+        BEGIN
+            UPDATE inspection_positions SET name = p_name, sort_order = p_sort_order WHERE id = p_id;
+            SELECT * FROM inspection_positions WHERE id = p_id;
+        END
+    """),
+
     ("sp_delete_position", """
         CREATE PROCEDURE sp_delete_position(IN p_id INT)
         BEGIN
-            DECLARE v_default TINYINT DEFAULT 0;
-            SELECT is_default INTO v_default FROM inspection_positions WHERE id = p_id;
-            IF v_default = 0 THEN
-                DELETE FROM inspection_positions WHERE id = p_id;
-                SELECT 1 AS deleted;
-            ELSE
-                SELECT 0 AS deleted;
-            END IF;
+            -- Allow deleting any position (including defaults) — owner is in control
+            DELETE FROM inspection_positions WHERE id = p_id;
+            SELECT ROW_COUNT() AS deleted;
         END
     """),
 
@@ -678,6 +709,56 @@ _STORED_PROCEDURES: list[tuple[str, str]] = [
             LIMIT p_limit;
         END
     """),
+
+    # ── Rental edit / delete ────────────────────────────────────────────────────
+
+    ("sp_update_rental", """
+        CREATE PROCEDURE sp_update_rental(
+            IN p_id                   INT,
+            IN p_expected_return_date DATE,
+            IN p_notes                TEXT,
+            IN p_daily_rate           DECIMAL(10,2),
+            IN p_pickup_location      VARCHAR(255),
+            IN p_dropoff_location     VARCHAR(255)
+        )
+        BEGIN
+            UPDATE rentals
+            SET expected_return_date = p_expected_return_date,
+                notes                = p_notes,
+                daily_rate           = p_daily_rate,
+                pickup_location      = p_pickup_location,
+                dropoff_location     = p_dropoff_location
+            WHERE id = p_id;
+            SELECT r.*,
+                   v.make, v.model, v.year, v.color, v.plate_number, v.category,
+                   c.full_name, c.phone, c.email, c.id_number
+            FROM rentals r
+            JOIN vehicles  v ON v.id = r.vehicle_id
+            JOIN customers c ON c.id = r.customer_id
+            WHERE r.id = p_id;
+        END
+    """),
+
+    ("sp_delete_rental", """
+        CREATE PROCEDURE sp_delete_rental(IN p_id INT)
+        BEGIN
+            DECLARE v_vehicle_id INT DEFAULT NULL;
+            DECLARE v_status     VARCHAR(50) DEFAULT NULL;
+
+            SELECT vehicle_id, status INTO v_vehicle_id, v_status
+            FROM rentals WHERE id = p_id;
+
+            IF v_status IS NULL THEN
+                SELECT 0 AS deleted, 'not_found' AS reason;
+            ELSEIF v_status NOT IN ('pre_inspection_pending') THEN
+                SELECT 0 AS deleted, 'already_active' AS reason;
+            ELSE
+                DELETE FROM rentals WHERE id = p_id;
+                UPDATE vehicles SET status = 'available' WHERE id = v_vehicle_id;
+                SELECT 1 AS deleted, '' AS reason;
+            END IF;
+        END
+    """),
 ]
 
 
@@ -697,6 +778,18 @@ def init_db() -> None:
                 stmt = stmt.strip()
                 if stmt:
                     cur.execute(stmt)
+
+            # 2b. Column migrations — add new columns to existing tables (idempotent)
+            cur.execute("SELECT DATABASE() AS db_name")
+            db_name = cur.fetchone()["db_name"]
+            for table, column, definition in _COLUMN_MIGRATIONS:
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM information_schema.columns "
+                    "WHERE table_schema = %s AND table_name = %s AND column_name = %s",
+                    (db_name, table, column)
+                )
+                if not cur.fetchone()["cnt"]:
+                    cur.execute(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition}")
 
             # 3. Seed default positions (only if none exist)
             cur.execute("SELECT COUNT(*) AS cnt FROM inspection_positions WHERE is_default = 1")

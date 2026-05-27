@@ -2,22 +2,24 @@ import { useState } from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Car, ClipboardList, PlusCircle,
-  History, ChevronLeft, Menu,
+  History, ChevronLeft, Menu, MapPin,
 } from 'lucide-react';
 
-import FleetDashboard    from './pages/FleetDashboard';
-import Vehicles          from './pages/Vehicles';
-import NewRentalWizard   from './pages/NewRentalWizard';
-import RentalHistory     from './pages/RentalHistory';
-import RentalDetail      from './pages/RentalDetail';
-import InspectionWizard  from './pages/InspectionWizard';
-import ComparisonResult  from './pages/ComparisonResult';
+import FleetDashboard      from './pages/FleetDashboard';
+import Vehicles            from './pages/Vehicles';
+import NewRentalWizard     from './pages/NewRentalWizard';
+import RentalHistory       from './pages/RentalHistory';
+import RentalDetail        from './pages/RentalDetail';
+import InspectionWizard    from './pages/InspectionWizard';
+import ComparisonResult    from './pages/ComparisonResult';
+import PositionsSettings   from './pages/PositionsSettings';
 
 const NAV = [
   { path: '/',              label: 'Fleet',       icon: LayoutDashboard, end: true },
   { path: '/vehicles',      label: 'Vehicles',    icon: Car },
   { path: '/rentals/new',   label: 'New Rental',  icon: PlusCircle },
   { path: '/rentals',       label: 'Rentals',     icon: ClipboardList },
+  { path: '/positions',     label: 'Positions',   icon: MapPin },
 ];
 
 const W_OPEN   = 220;
@@ -37,12 +39,12 @@ export default function App() {
         <div className="sidebar-brand">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <div className="brand-logo">
-              <Car size={15} color="#fff" />
+              <Car size={16} color="#fff" />
             </div>
             {open && <span className="brand-name">RentalScan</span>}
           </div>
           <button className="sidebar-toggle" onClick={() => setOpen(o => !o)}>
-            {open ? <ChevronLeft size={15} /> : <Menu size={15} />}
+            {open ? <ChevronLeft size={16} /> : <Menu size={16} />}
           </button>
         </div>
 
@@ -54,7 +56,7 @@ export default function App() {
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               title={!open ? label : undefined}
             >
-              <Icon size={17} className="nav-icon" />
+              <Icon size={19} className="nav-icon" />
               {open && label}
             </NavLink>
           ))}
@@ -102,6 +104,7 @@ export default function App() {
             <Route path="/rentals/:id"                      element={<RentalDetail />} />
             <Route path="/rentals/:id/inspect/:type"        element={<InspectionWizard />} />
             <Route path="/rentals/:id/comparison"           element={<ComparisonResult />} />
+            <Route path="/positions"                        element={<PositionsSettings />} />
             <Route path="*"                                 element={<Navigate to="/" replace />} />
           </Routes>
         </main>

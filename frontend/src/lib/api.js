@@ -29,11 +29,14 @@ export const api = {
   listRentals:        (params = {}) => api.get(`/rentals?${new URLSearchParams(params)}`),
   createRental:       (data)        => api.post('/rentals', data),
   getRental:          (id)          => api.get(`/rentals/${id}`),
+  updateRental:       (id, data)    => api.patch(`/rentals/${id}`, data),
+  deleteRental:       (id)          => api.delete(`/rentals/${id}`),
   updateRentalStatus: (id, data)    => api.patch(`/rentals/${id}/status`, data),
 
   // Positions
   listPositions:  ()            => api.get('/positions'),
   createPosition: (data)        => api.post('/positions', data),
+  updatePosition: (id, data)    => api.patch(`/positions/${id}`, data),
   deletePosition: (id)          => api.delete(`/positions/${id}`),
 
   // Inspections

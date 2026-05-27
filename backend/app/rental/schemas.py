@@ -43,6 +43,8 @@ class CustomerCreate(BaseModel):
     phone: str
     email: Optional[str] = None
     id_number: str
+    address: Optional[str] = None
+    license_expiry: Optional[str] = None  # "YYYY-MM-DD"
 
 class CustomerOut(BaseModel):
     id: int
@@ -50,6 +52,8 @@ class CustomerOut(BaseModel):
     phone: str
     email: Optional[str] = None
     id_number: str
+    address: Optional[str] = None
+    license_expiry: Optional[str] = None
     created_at: str
 
     model_config = {"from_attributes": True}
@@ -63,10 +67,22 @@ class RentalCreate(BaseModel):
     start_date: str            # "YYYY-MM-DD"
     expected_return_date: str  # "YYYY-MM-DD"
     notes: Optional[str] = None
+    pickup_location: Optional[str] = None
+    dropoff_location: Optional[str] = None
+    fuel_level_pickup: Optional[str] = None   # full | 3/4 | 1/2 | 1/4 | empty
+    odometer_pickup: Optional[int] = None
+    daily_rate: Optional[float] = None
 
 class RentalStatusUpdate(BaseModel):
     status: str
     actual_return_date: Optional[str] = None  # "YYYY-MM-DD"
+
+class RentalUpdate(BaseModel):
+    expected_return_date: str           # "YYYY-MM-DD"
+    notes: Optional[str] = None
+    daily_rate: Optional[float] = None
+    pickup_location: Optional[str] = None
+    dropoff_location: Optional[str] = None
 
 class RentalOut(BaseModel):
     id: int
@@ -77,6 +93,11 @@ class RentalOut(BaseModel):
     actual_return_date: Optional[str] = None
     status: str
     notes: Optional[str] = None
+    pickup_location: Optional[str] = None
+    dropoff_location: Optional[str] = None
+    fuel_level_pickup: Optional[str] = None
+    odometer_pickup: Optional[int] = None
+    daily_rate: Optional[float] = None
     created_at: str
     # Joined vehicle fields
     make: Optional[str] = None
@@ -99,6 +120,10 @@ class RentalOut(BaseModel):
 class PositionCreate(BaseModel):
     name: str
     sort_order: int = 99
+
+class PositionUpdate(BaseModel):
+    name: str
+    sort_order: int
 
 class PositionOut(BaseModel):
     id: int

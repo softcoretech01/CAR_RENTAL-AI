@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Camera, CheckCircle, ChevronLeft, ChevronRight,
-  SkipForward, ListChecks, Check,
+  SkipForward, ListChecks, Check, Plus, Settings,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import PhotoCapture from '../components/PhotoCapture';
@@ -49,6 +49,31 @@ export default function InspectionWizard() {
     }
     init();
   }, [rentalId, type]);
+
+  /* ── Quick-add a position from the setup screen ── */
+  const [quickName, setQuickName] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+  const quickRef = useRef(null);
+
+  async function quickAddPosition(e) {
+    e.preventDefault();
+    if (!quickName.trim()) return;
+    setQuickBusy(true);
+    try {
+      const maxOrder = allPositions.length > 0
+        ? Math.max(...allPositions.map(p => p.sort_order)) + 1
+        : 99;
+      const pos = await api.createPosition({ name: quickName.trim(), sort_order: maxOrder });
+      setAllPositions(prev => [...prev, pos]);
+      setSelected(prev => new Set([...prev, pos.id]));   // auto-select the new one
+      setQuickName('');
+      quickRef.current?.focus();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setQuickBusy(false);
+    }
+  }
 
   /* ── Setup helpers ─────────────────────────────────── */
   function togglePos(id) {
@@ -119,20 +144,43 @@ export default function InspectionWizard() {
   ══════════════════════════════════════════════════════ */
   if (phase === PHASE_SETUP) {
     return (
-      <div className="fade-up" style={{ maxWidth: 680 }}>
-        {/* Header */}
-        <div style={{ marginBottom: 28 }}>
-          <button className="btn btn-ghost btn-sm" style={{ marginBottom: 12 }}
-            onClick={() => navigate(`/rentals/${rentalId}`)}>
-            <ChevronLeft size={14} /> Back to Rental
+      /* Full-viewport-height column — no empty space below */
+      <div className="fade-up" style={{
+        display: 'flex', flexDirection: 'column',
+        height: 'calc(100vh - 120px)', minHeight: 400,
+      }}>
+        {/* Compact header row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 12, marginBottom: 16, flexShrink: 0,
+        }}>
+          <div>
+            <button className="btn btn-ghost btn-sm" style={{ marginBottom: 6 }}
+              onClick={() => navigate(`/rentals/${rentalId}`)}>
+              <ChevronLeft size={14} /> Back to Rental
+            </button>
+            <h1 className="page-title" style={{ margin: 0 }}>{label}</h1>
+            <p className="page-sub">Rental #{rentalId} — choose which positions to photograph</p>
+          </div>
+          {/* Start button visible at top too */}
+          <button
+            className="btn btn-primary"
+            disabled={selected.size === 0}
+            onClick={startCapture}
+            style={{ flexShrink: 0 }}
+          >
+            Start {label} <ChevronRight size={15} />
           </button>
-          <h1 className="page-title">{label}</h1>
-          <p className="page-sub">Rental #{rentalId} — choose which positions to photograph</p>
         </div>
 
-        <div className="card">
-          {/* Toolbar */}
-          <div className="card-header">
+        {/* Card fills all remaining height */}
+        <div className="card" style={{
+          flex: 1, minHeight: 0,
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden', margin: 0,
+        }}>
+          {/* Toolbar — fixed */}
+          <div className="card-header" style={{ flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ListChecks size={15} color="var(--text3)" />
               <span className="card-title">Positions to inspect</span>
@@ -146,12 +194,13 @@ export default function InspectionWizard() {
             </div>
           </div>
 
-          {/* Position checklist */}
-          <div className="card-body">
+          {/* Position checklist — scrolls when list is long */}
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 22px' }}>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               gap: 8,
+              alignContent: 'start',
             }}>
               {allPositions.map(pos => {
                 const on = selected.has(pos.id);
@@ -169,7 +218,6 @@ export default function InspectionWizard() {
                       color: on ? 'var(--violet)' : 'var(--text2)',
                     }}
                   >
-                    {/* Checkbox */}
                     <div style={{
                       width: 18, height: 18, borderRadius: 4, flexShrink: 0,
                       background: on ? 'var(--violet)' : 'transparent',
@@ -191,13 +239,47 @@ export default function InspectionWizard() {
             )}
           </div>
 
-          {/* Footer */}
+          {/* Quick-add — pinned above footer */}
           <div style={{
-            padding: '14px 22px', borderTop: '1px solid var(--border)',
+            padding: '12px 22px', borderTop: '1px solid var(--border)',
+            background: 'var(--surface2)', flexShrink: 0,
+          }}>
+            <form onSubmit={quickAddPosition} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Plus size={13} color="var(--text3)" style={{ flexShrink: 0 }} />
+              <input
+                ref={quickRef}
+                className="field"
+                style={{ flex: 1, fontSize: 13 }}
+                placeholder="Add a position: e.g. Left Mirror, Sunroof…"
+                value={quickName}
+                onChange={e => setQuickName(e.target.value)}
+                disabled={quickBusy}
+              />
+              <button
+                type="submit"
+                className="btn btn-ghost btn-sm"
+                disabled={quickBusy || !quickName.trim()}
+              >
+                {quickBusy ? '…' : 'Add'}
+              </button>
+              <Link
+                to="/positions"
+                style={{ fontSize: 12, color: 'var(--violet)', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                <Settings size={11} style={{ display: 'inline', marginRight: 3, verticalAlign: 'middle' }} />
+                Manage
+              </Link>
+            </form>
+          </div>
+
+          {/* Footer — always pinned at bottom */}
+          <div style={{
+            padding: '12px 22px', borderTop: '1px solid var(--border)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexShrink: 0,
           }}>
             <p style={{ fontSize: 12, color: 'var(--text3)' }}>
-              You can skip individual positions during capture too.
+              You can also skip individual positions during capture.
             </p>
             <button
               className="btn btn-primary"
@@ -259,19 +341,28 @@ export default function InspectionWizard() {
         </div>
       </div>
 
-      {/* Two-panel layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+      {/* Two-panel layout — height-constrained so footer is always visible */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '220px 1fr',
+        gap: 16,
+        height: 'calc(100vh - 210px)',
+        minHeight: 320,
+      }}>
 
-        {/* ── LEFT: position list ── */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'sticky', top: 20 }}>
+        {/* ── LEFT: position list — scrollable, full height ── */}
+        <div className="card" style={{
+          padding: 0, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', height: '100%',
+        }}>
           <div style={{
             padding: '10px 14px', borderBottom: '1px solid var(--border)',
             fontSize: 11, fontWeight: 700, color: 'var(--text3)',
-            textTransform: 'uppercase', letterSpacing: '.06em',
+            textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0,
           }}>
             Positions
           </div>
-          <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {activeList.map((pos, i) => {
               const isDone    = !!photos[pos.id];
               const isCurrent = i === posIdx;
@@ -323,37 +414,41 @@ export default function InspectionWizard() {
           </div>
         </div>
 
-        {/* ── RIGHT: capture card ── */}
+        {/* ── RIGHT: capture card — flex column, footer always pinned ── */}
         {currentPos && (
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {/* Position header */}
-            <div className="card-header" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="card" style={{
+            padding: 0, overflow: 'hidden',
+            display: 'flex', flexDirection: 'column', height: '100%',
+          }}>
+            {/* Position header — fixed */}
+            <div className="card-header" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--text)' }}>
                   {currentPos.name}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-                  {photos[currentPos.id] ? '✓ Photo saved — tap to retake' : 'Upload or take a photo of this position'}
+                  {photos[currentPos.id] ? '✓ Photo saved — tap to retake' : 'Tap the area below to upload or take a photo'}
                 </div>
               </div>
               {photos[currentPos.id] && <CheckCircle size={20} color="var(--green)" />}
             </div>
 
-            {/* Photo area — compact, not huge */}
-            <div style={{ padding: '20px 24px' }}>
+            {/* Photo area — fills all remaining height */}
+            <div style={{ flex: 1, minHeight: 0, padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
               <PhotoCapture
                 key={currentPos.id}
                 positionName={currentPos.name}
                 onCapture={handleCapture}
                 existingUrl={photos[currentPos.id] ? api.imageUrl(photos[currentPos.id].image_path) : null}
+                fill
               />
             </div>
 
-            {/* Navigation footer */}
+            {/* Navigation footer — always visible at bottom */}
             <div style={{
-              padding: '14px 24px', borderTop: '1px solid var(--border)',
+              padding: '12px 20px', borderTop: '1px solid var(--border)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
-              background: 'var(--surface2)',
+              background: 'var(--surface2)', flexShrink: 0,
             }}>
               <button
                 className="btn btn-ghost"

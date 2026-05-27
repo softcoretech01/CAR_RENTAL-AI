@@ -6,7 +6,7 @@
 import { useRef, useState } from 'react';
 import { Camera, CheckCircle, Loader } from 'lucide-react';
 
-export default function PhotoCapture({ positionName, onCapture, existingUrl, disabled }) {
+export default function PhotoCapture({ positionName, onCapture, existingUrl, disabled, fill }) {
   const inputRef  = useRef(null);
   const [preview, setPreview] = useState(existingUrl || null);
   const [busy,    setBusy]    = useState(false);
@@ -25,15 +25,16 @@ export default function PhotoCapture({ positionName, onCapture, existingUrl, dis
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', height: fill ? '100%' : undefined }}>
       {/* Label */}
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', flexShrink: 0 }}>
         {positionName}
       </div>
 
-      {/* Photo slot */}
+      {/* Photo slot — fills remaining height when fill=true */}
       <div
         className="photo-slot"
+        style={fill ? { flex: 1, aspectRatio: 'unset', minHeight: 0 } : undefined}
         onClick={() => !disabled && !busy && inputRef.current?.click()}
       >
         {preview ? (
