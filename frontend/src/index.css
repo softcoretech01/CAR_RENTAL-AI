@@ -113,6 +113,8 @@ body {
   cursor: pointer; transition: background .15s;
 }
 .photo-slot-empty:hover { background: var(--violet-bg); color: var(--violet); }
+.photo-slot .replace-btn { opacity: 0; }
+.photo-slot:hover .replace-btn { opacity: 1; }
 
 /* ─── COMPARISON CARD ────────────────────────────────────────────── */
 .comparison-card {

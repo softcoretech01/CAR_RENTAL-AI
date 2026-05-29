@@ -215,21 +215,22 @@ def _render_report_html(rental: dict, comparison: dict, items: list[dict]) -> st
     for item in items:
         pre_uri  = _img_data_uri(item.get("pre_image_path"))
         post_uri = _img_data_uri(item.get("post_image_path"))
-        pre_img  = f'<img src="{pre_uri}" style="max-width:200px;max-height:150px">' if pre_uri else "<em>No photo</em>"
-        post_img = f'<img src="{post_uri}" style="max-width:200px;max-height:150px">' if post_uri else "<em>No photo</em>"
+        pre_img  = f'<img src="{pre_uri}" style="width:100%;max-height:140px;object-fit:cover;border-radius:4px">' if pre_uri else "<em>No photo</em>"
+        post_img = f'<img src="{post_uri}" style="width:100%;max-height:140px;object-fit:cover;border-radius:4px">' if post_uri else "<em>No photo</em>"
         status_label = _status_label(item.get("status", ""))
         row_color = "#fef2f2" if item.get("status") == "new_damage" else "white"
         dmg_types = ", ".join(item.get("damage_types") or []) or "—"
         explanation = item.get("explanation") or "—"
 
+        verdict_td_color = '#dc2626' if item.get('status') == 'new_damage' else '#16a34a' if item.get('status') == 'no_change' else '#d97706'
         rows_html += f"""
         <tr style="background:{row_color}">
-            <td style="padding:8px;font-weight:600">{item.get('position_name', '—')}</td>
-            <td style="padding:8px;text-align:center">{pre_img}</td>
-            <td style="padding:8px;text-align:center">{post_img}</td>
-            <td style="padding:8px;font-weight:600;color:{'#dc2626' if item.get('status')=='new_damage' else '#16a34a' if item.get('status')=='no_change' else '#d97706'}">{status_label}</td>
-            <td style="padding:8px;font-size:12px">{dmg_types}</td>
-            <td style="padding:8px;font-size:12px">{explanation}</td>
+            <td style="font-weight:600">{item.get('position_name', '—')}</td>
+            <td style="text-align:center">{pre_img}</td>
+            <td style="text-align:center">{post_img}</td>
+            <td style="font-weight:600;color:{verdict_td_color}">{status_label}</td>
+            <td>{dmg_types}</td>
+            <td>{explanation}</td>
         </tr>"""
 
     return f"""<!DOCTYPE html>
@@ -237,22 +238,28 @@ def _render_report_html(rental: dict, comparison: dict, items: list[dict]) -> st
 <head>
 <meta charset="UTF-8">
 <style>
-  body {{ font-family: Arial, sans-serif; color: #1e293b; padding: 24px; }}
-  h1 {{ font-size: 22px; color: #1e293b; margin-bottom: 4px; }}
-  .subtitle {{ color: #64748b; font-size: 13px; margin-bottom: 24px; }}
-  .info-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }}
-  .info-box {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; }}
-  .info-box h3 {{ font-size: 12px; text-transform: uppercase; color: #64748b; margin: 0 0 8px; }}
-  .info-box p {{ margin: 2px 0; font-size: 14px; }}
+  @page {{ size: A4 landscape; margin: 1.5cm; }}
+  body {{ font-family: Arial, sans-serif; color: #1e293b; margin: 0; }}
+  h1 {{ font-size: 20px; color: #1e293b; margin-bottom: 4px; }}
+  .subtitle {{ color: #64748b; font-size: 12px; margin-bottom: 20px; }}
+  .info-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }}
+  .info-box {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }}
+  .info-box h3 {{ font-size: 11px; text-transform: uppercase; color: #64748b; margin: 0 0 6px; }}
+  .info-box p {{ margin: 2px 0; font-size: 12px; }}
   .verdict {{ background: {verdict_color}15; border: 2px solid {verdict_color};
-              border-radius: 8px; padding: 16px; margin-bottom: 24px; text-align: center; }}
-  .verdict h2 {{ color: {verdict_color}; margin: 0; font-size: 20px; }}
-  .verdict p {{ color: {verdict_color}; margin: 4px 0 0; font-size: 13px; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
-  th {{ background: #f1f5f9; padding: 10px 8px; text-align: left;
-        border-bottom: 2px solid #e2e8f0; font-size: 12px; text-transform: uppercase; color: #64748b; }}
-  td {{ border-bottom: 1px solid #e2e8f0; vertical-align: top; }}
-  .footer {{ margin-top: 32px; text-align: center; color: #94a3b8; font-size: 11px; }}
+              border-radius: 8px; padding: 12px; margin-bottom: 20px; text-align: center; }}
+  .verdict h2 {{ color: {verdict_color}; margin: 0; font-size: 18px; }}
+  .verdict p {{ color: {verdict_color}; margin: 4px 0 0; font-size: 12px; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }}
+  col.c-pos    {{ width: 10%; }}
+  col.c-img    {{ width: 18%; }}
+  col.c-verdict {{ width: 11%; }}
+  col.c-dmg    {{ width: 11%; }}
+  col.c-ai     {{ width: 32%; }}
+  th {{ background: #f1f5f9; padding: 8px 6px; text-align: left;
+        border-bottom: 2px solid #e2e8f0; font-size: 10px; text-transform: uppercase; color: #64748b; }}
+  td {{ border-bottom: 1px solid #e2e8f0; vertical-align: top; padding: 6px; word-wrap: break-word; overflow-wrap: break-word; }}
+  .footer {{ margin-top: 24px; text-align: center; color: #94a3b8; font-size: 10px; }}
 </style>
 </head>
 <body>
@@ -291,6 +298,14 @@ def _render_report_html(rental: dict, comparison: dict, items: list[dict]) -> st
 </div>
 
 <table>
+  <colgroup>
+    <col class="c-pos">
+    <col class="c-img">
+    <col class="c-img">
+    <col class="c-verdict">
+    <col class="c-dmg">
+    <col class="c-ai">
+  </colgroup>
   <thead>
     <tr>
       <th>Position</th>

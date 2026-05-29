@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Camera, Car, User, Calendar, ArrowRight,
-  FileText, Loader, AlertTriangle, ChevronLeft,
+  FileText, Loader, AlertTriangle, ChevronLeft, RefreshCw,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import StatusBadge from '../components/StatusBadge';
@@ -34,7 +34,7 @@ export default function RentalDetail() {
           const insp = await api.getInspectionByRental(id, 'pre');
           if (insp?.id) {
             const photos = await api.getInspectionPhotos(insp.id);
-            setPrePhotos(photos.map(p => ({ image_path: p.image_path, position_name: p.position_name })));
+            setPrePhotos(photos.map(p => ({ ...p, inspectionId: insp.id })));
           }
         } catch {}
       }
@@ -45,7 +45,7 @@ export default function RentalDetail() {
           const insp = await api.getInspectionByRental(id, 'post');
           if (insp?.id) {
             const photos = await api.getInspectionPhotos(insp.id);
-            setPostPhotos(photos.map(p => ({ image_path: p.image_path, position_name: p.position_name })));
+            setPostPhotos(photos.map(p => ({ ...p, inspectionId: insp.id })));
           }
         } catch {}
       }
@@ -65,6 +65,11 @@ export default function RentalDetail() {
   }
 
   useEffect(() => { load(); }, [id]);
+
+  async function replacePhoto(photo, file) {
+    await api.addInspectionPhoto(photo.inspectionId, photo.position_id, file);
+    await load();
+  }
 
   async function startComparison() {
     setComparing(true);
@@ -249,10 +254,10 @@ export default function RentalDetail() {
       {(prePhotos.length > 0 || postPhotos.length > 0) && (
         <div className="grid-2">
           {prePhotos.length > 0 && (
-            <PhotoSection title="Pre-Inspection Photos" photos={prePhotos} />
+            <PhotoSection title="Pre-Inspection Photos" photos={prePhotos} onReplace={replacePhoto} />
           )}
           {postPhotos.length > 0 && (
-            <PhotoSection title="Post-Inspection Photos" photos={postPhotos} />
+            <PhotoSection title="Post-Inspection Photos" photos={postPhotos} onReplace={replacePhoto} />
           )}
         </div>
       )}
@@ -290,19 +295,67 @@ function ActionRow({ title, sub, onClick, label, color, icon, disabled }) {
   );
 }
 
-function PhotoSection({ title, photos }) {
+function PhotoSection({ title, photos, onReplace }) {
+  const [replacing, setReplacing] = useState(null);
+  const inputRef = useRef(null);
+  const pendingPhoto = useRef(null);
+
+  function triggerReplace(photo) {
+    pendingPhoto.current = photo;
+    inputRef.current?.click();
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file || !pendingPhoto.current) return;
+    e.target.value = '';
+    const photo = pendingPhoto.current;
+    setReplacing(photo.id);
+    try {
+      await onReplace(photo, file);
+    } finally {
+      setReplacing(null);
+    }
+  }
+
   return (
     <div className="card">
       <div className="card-header"><span className="card-title">{title}</span></div>
       <div className="card-body">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
         <div className="photo-grid">
           {photos.map((p, i) => (
-            <div key={i} style={{ textAlign: 'center' }}>
-              <div className="photo-slot">
+            <div key={i} style={{ textAlign: 'center', position: 'relative' }}>
+              <div className="photo-slot" style={{ position: 'relative', overflow: 'hidden' }}>
                 <img src={api.imageUrl(p.image_path)} alt={p.position_name} />
                 {p.position_name && (
                   <div className="comparison-photo-label" style={{ fontSize: 9 }}>{p.position_name}</div>
                 )}
+                <button
+                  onClick={() => triggerReplace(p)}
+                  disabled={!!replacing}
+                  title="Replace photo"
+                  style={{
+                    position: 'absolute', top: 4, right: 4,
+                    width: 26, height: 26, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.55)', border: 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', opacity: replacing === p.id ? 1 : undefined,
+                    transition: 'opacity .15s',
+                  }}
+                  className="replace-btn"
+                >
+                  {replacing === p.id
+                    ? <Loader size={12} color="#fff" className="spin" />
+                    : <RefreshCw size={12} color="#fff" />
+                  }
+                </button>
               </div>
             </div>
           ))}
